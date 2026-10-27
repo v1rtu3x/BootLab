@@ -1,0 +1,40 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Generated image corpus and run-specific hash manifest
+artifacts/corpus/
+fixtures/keys/*.pem
+fixtures/keys/evidence-signer.pem
+
+evidence/
+out/
+dist/
+build/
+
+# Editor and OS metadata
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Coverage and test reports
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Rust build output from vendored MCUboot
+vendor/mcuboot/target/
+
+# Zephyr workspace and build output
+zephyr-work/
+app/*/build/
+app/*/build-*/
