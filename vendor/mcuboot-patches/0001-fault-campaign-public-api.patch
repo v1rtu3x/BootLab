@@ -1,0 +1,96 @@
+diff --git a/sim/src/image.rs b/sim/src/image.rs
+index 19754b7..65eafa6 100644
+--- a/sim/src/image.rs
++++ b/sim/src/image.rs
+@@ -1742,6 +1742,42 @@ impl Images {
+         }
+     }
+ 
++    /// Run an upgrade, optionally stopping after `fault_index` flash operations to
++    /// simulate a power-loss reset, then resuming. Returns the final flash state
++    /// and the total operation count. Public entry point for fault campaigns.
++    pub fn run_upgrade_with_fault_at(&self, fault_index: i32, permanent: bool) -> (SimMultiFlash, i32) {
++        self.try_upgrade(Some(fault_index), permanent)
++    }
++
++    /// Public fault-campaign helper: stop at `fault_index`, resume, and verify
++    /// that the upgrade completed correctly and the final state is consistent.
++    /// Returns `true` if a failure was detected.
++    pub fn run_fault_campaign_check(&self, fault_index: i32) -> bool {
++        let (flash, _count) = self.run_upgrade_with_fault_at(fault_index, true);
++        let mut fails = 0;
++
++        if !self.verify_images(&flash, 0, 1) {
++            warn!("Primary slot does not contain expected new image at fault {}", fault_index);
++            fails += 1;
++        }
++        if self.is_swap_upgrade() && !self.verify_images(&flash, 1, 0) {
++            warn!("Secondary slot does not contain expected old image at fault {}", fault_index);
++            fails += 1;
++        }
++        if !self.verify_trailers(&flash, 0, BOOT_MAGIC_GOOD,
++                                 BOOT_FLAG_SET, BOOT_FLAG_SET) {
++            warn!("Primary slot trailer mismatch at fault {}", fault_index);
++            fails += 1;
++        }
++        if !self.verify_trailers(&flash, 1, BOOT_MAGIC_UNSET,
++                                 BOOT_FLAG_UNSET, BOOT_FLAG_UNSET) {
++            warn!("Secondary slot trailer mismatch at fault {}", fault_index);
++            fails += 1;
++        }
++
++        fails > 0
++    }
++
+     /// Test a boot, optionally stopping after 'n' flash options.  Returns a count
+     /// of the number of flash operations done total.
+     fn try_upgrade(&self, stop: Option<i32>, permanent: bool) -> (SimMultiFlash, i32) {
+diff --git a/sim/tests/fault_campaign.rs b/sim/tests/fault_campaign.rs
+new file mode 100644
+index 0000000..c2069da
+--- /dev/null
++++ b/sim/tests/fault_campaign.rs
+@@ -0,0 +1,43 @@
++// Copyright (c) 2026 BootLab contributors
++//
++// SPDX-License-Identifier: Apache-2.0
++
++//! Deterministic fault-campaign tests for the BootLab lab.
++//!
++//! These tests extend the upstream simulator with explicit, reproducible
++//! interruption points. The Python harness selects the fault index via the
++//! `FAULT_INDEX` environment variable.
++
++use bootsim::{ImagesBuilder, NO_DEPS, testlog};
++
++/// Probe the total number of flash operations for a standard upgrade.
++#[test]
++fn fault_campaign_probe() {
++    testlog::setup();
++
++    ImagesBuilder::each_device(|r| {
++        let images = r.make_image(&NO_DEPS, true);
++        let total = images.run_basic_upgrade(true)
++            .expect("upgrade must succeed to establish fault-campaign baseline");
++        println!("FAULT_PROBE total_ops={}", total);
++    });
++}
++
++/// Run a single upgrade with an interruption at `FAULT_INDEX`, then resume and
++/// verify that the upgrade converges to a consistent state.
++#[test]
++fn fault_campaign_upgrade() {
++    testlog::setup();
++
++    let fault_index: i32 = std::env::var("FAULT_INDEX")
++        .expect("FAULT_INDEX environment variable must be set")
++        .parse()
++        .expect("FAULT_INDEX must be an integer");
++
++    ImagesBuilder::each_device(|r| {
++        let images = r.make_image(&NO_DEPS, true);
++        let failed = images.run_fault_campaign_check(fault_index);
++        println!("FAULT_RESULT index={} failed={}", fault_index, failed);
++        assert!(!failed, "fault_campaign_upgrade failed at index {}", fault_index);
++    });
++}
