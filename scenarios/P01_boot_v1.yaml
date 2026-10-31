@@ -1,0 +1,25 @@
+id: P01
+name: boot-v1-trusted
+category: baseline
+profile: mcuboot_swap_reference
+primary:
+  name: v1.0.0-trusted
+  version: 1.0.0
+  trusted: true
+secondary: null
+operation: boot
+backend: mcuboot_sim
+backend_args:
+  cargo_test: basic_revert
+  cargo_features: sig-ecdsa
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  outcome_in:
+    - old_authenticated_image
+  booted_version: "1.0.0"
+notes: |
+  Proxy for a successful boot of a trusted v1 image using the upstream
+  basic_revert test. Direct injection of our imgtool corpus is a future
+  simulator extension.

@@ -1,0 +1,27 @@
+id: P04
+name: confirm-v2-persists
+category: trial
+profile: mcuboot_swap_reference
+primary:
+  name: v1.0.0-trusted
+  version: 1.0.0
+  trusted: true
+secondary:
+  name: v2.0.0-trusted
+  version: 2.0.0
+  trusted: true
+operation: confirm
+backend: mcuboot_sim
+backend_args:
+  cargo_test: norevert
+  cargo_features: sig-ecdsa
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  outcome_in:
+    - new_authenticated_image
+  booted_version: "2.0.0"
+notes: |
+  Proxy for confirm semantics: the upstream norevert test marks the upgrade
+  as permanent/confirmed so the new image persists across subsequent boots.

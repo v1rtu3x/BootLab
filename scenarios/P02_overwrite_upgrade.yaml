@@ -1,0 +1,27 @@
+id: P02O
+name: overwrite-upgrade-v2-trusted
+category: baseline
+profile: mcuboot_overwrite_reference
+primary:
+  name: v1.0.0-trusted
+  version: 1.0.0
+  trusted: true
+secondary:
+  name: v2.0.0-trusted
+  version: 2.0.0
+  trusted: true
+operation: stage_then_upgrade
+backend: mcuboot_sim
+backend_args:
+  cargo_test: norevert
+  cargo_features: "sig-ecdsa overwrite-only"
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  outcome_in:
+    - new_authenticated_image
+  booted_version: "2.0.0"
+notes: |
+  Overwrite-only upgrade for cross-mode comparison. Uses norevert because
+  overwrite-only does not perform the same trial/confirm swap semantics.

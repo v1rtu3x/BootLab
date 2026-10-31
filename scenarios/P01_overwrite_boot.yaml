@@ -1,0 +1,22 @@
+id: P01O
+name: overwrite-boot-v1-trusted
+category: baseline
+profile: mcuboot_overwrite_reference
+primary:
+  name: v1.0.0-trusted
+  version: 1.0.0
+  trusted: true
+operation: boot
+backend: mcuboot_sim
+backend_args:
+  cargo_test: basic_revert
+  cargo_features: "sig-ecdsa overwrite-only"
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  outcome_in:
+    - old_authenticated_image
+  booted_version: "1.0.0"
+notes: |
+  Overwrite-only baseline boot for cross-mode comparison.

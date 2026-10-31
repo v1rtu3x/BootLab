@@ -1,0 +1,28 @@
+id: P03
+name: trial-v2-without-confirmation-reverts
+category: trial
+profile: mcuboot_swap_reference
+primary:
+  name: v1.0.0-trusted
+  version: 1.0.0
+  trusted: true
+secondary:
+  name: v2.0.0-trusted
+  version: 2.0.0
+  trusted: true
+operation: trial
+backend: mcuboot_sim
+backend_args:
+  cargo_test: basic_revert
+  cargo_features: sig-ecdsa
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  outcome_in:
+    - old_authenticated_image
+  booted_version: "1.0.0"
+notes: |
+  Proxy for trial/confirm/revert semantics: the upstream basic_revert test
+  performs a trial boot of the new image and then reverts to the old image
+  when the new image is not confirmed.
