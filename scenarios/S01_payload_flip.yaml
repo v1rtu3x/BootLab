@@ -1,0 +1,24 @@
+id: S01
+name: payload-bitflip-rejected
+category: integrity
+profile: mcuboot_swap_reference
+secondary:
+  name: v2.0.0-trusted-payload-flip
+  version: 2.0.0
+  trusted: false
+operation: stage_then_upgrade
+backend: imgtool_verify
+backend_args:
+  image: v2.0.0-trusted-payload-flip.bin
+  key_id: dev-trusted
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  verify_rejected: true
+  outcome_in:
+    - secure_refusal
+notes: |
+  A bit flipped inside the authenticated payload area after signing must not
+  verify with the trusted key. This exercises AUTH-01/INTEG-01 at the image
+  validation layer.

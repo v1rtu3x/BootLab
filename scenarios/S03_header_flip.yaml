@@ -1,0 +1,23 @@
+id: S03
+name: header-version-mutation-rejected
+category: integrity
+profile: mcuboot_swap_reference
+secondary:
+  name: v2.0.0-trusted-header-flip
+  version: 2.0.0
+  trusted: false
+operation: stage_then_upgrade
+backend: imgtool_verify
+backend_args:
+  image: v2.0.0-trusted-header-flip.bin
+  key_id: dev-trusted
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  verify_rejected: true
+  outcome_in:
+    - secure_refusal
+notes: |
+  Mutating signed header/version bytes after signing must break the
+  authenticated integrity check.

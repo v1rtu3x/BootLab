@@ -1,0 +1,22 @@
+id: S05
+name: oversized-secondary-slot-rejected
+category: validation
+profile: mcuboot_swap_reference
+secondary:
+  name: oversized-update
+  version: 2.0.0
+  trusted: false
+operation: stage_then_upgrade
+backend: mcuboot_sim
+backend_args:
+  cargo_test: oversized_secondary_slot
+  cargo_features: sig-ecdsa
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  outcome_in:
+    - secure_refusal
+notes: |
+  An image that does not fit in the secondary slot must be rejected without
+  corrupting the primary slot.

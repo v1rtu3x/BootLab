@@ -1,0 +1,21 @@
+id: S06
+name: bad-secondary-signature-rejected
+category: authenticity
+profile: mcuboot_swap_reference
+secondary:
+  name: v2.0.0-trusted-payload-flip
+  version: 2.0.0
+  trusted: false
+operation: stage_then_upgrade
+backend: mcuboot_sim
+backend_args:
+  cargo_test: bad_secondary_slot
+  cargo_features: sig-ecdsa
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  outcome_in:
+    - secure_refusal
+notes: |
+  A secondary-slot image with a bad signature must not be upgraded to.

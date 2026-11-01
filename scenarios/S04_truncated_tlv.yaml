@@ -1,0 +1,23 @@
+id: S04
+name: truncated-image-rejected
+category: validation
+profile: mcuboot_swap_reference
+secondary:
+  name: v2.0.0-trusted-truncated
+  version: 2.0.0
+  trusted: false
+operation: stage_then_upgrade
+backend: imgtool_verify
+backend_args:
+  image: v2.0.0-trusted-truncated.bin
+  key_id: dev-trusted
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  verify_rejected: true
+  outcome_in:
+    - secure_refusal
+notes: |
+  A truncated image with a malformed TLV area must be rejected safely by
+  validation rather than executed.
