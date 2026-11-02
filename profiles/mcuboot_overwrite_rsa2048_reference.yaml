@@ -1,0 +1,35 @@
+id: mcuboot_overwrite_rsa2048_reference
+name: MCUboot overwrite-only reference profile with RSA-2048
+bootloader:
+  repository: https://github.com/mcu-tools/mcuboot
+  commit: 229068b6d34688ddc7286c6d2056527b72f03cf4
+  branch: main
+  description: |
+    Overwrite-only simulator configuration using RSA-2048 signatures.
+    Cross-mode comparison counterpart to mcuboot_swap_rsa2048_reference.
+device:
+  name: nrf52840
+  align: 8
+  erased_value: 0xff
+  primary_slot:
+    base: 0x008000
+    size: 0x034000
+  secondary_slot:
+    base: 0x03c000
+    size: 0x034000
+signature:
+  algorithm: rsa-2048
+  key_id: dev-trusted
+image:
+  header_size: 0x200
+  slot_size: 0x034000
+  align: 8
+  overwrite_only: true
+  downgrade_prevention: false
+security_counter:
+  enabled: false
+features:
+  - sig-rsa
+  - overwrite-only
+notes: |
+  Development-only RSA-2048 signing keys.

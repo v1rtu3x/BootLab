@@ -1,0 +1,37 @@
+id: mcuboot_overwrite_reference
+name: MCUboot overwrite-only reference profile
+bootloader:
+  repository: https://github.com/mcu-tools/mcuboot
+  commit: 229068b6d34688ddc7286c6d2056527b72f03cf4
+  branch: main
+  description: |
+    Reference simulator configuration using overwrite-only upgrade on the
+    nrf52840 flash layout. ECDSA-P256 signatures. Used for cross-mode
+    comparison with mcuboot_swap_reference.
+device:
+  name: nrf52840
+  align: 8
+  erased_value: 0xff
+  primary_slot:
+    base: 0x008000
+    size: 0x034000
+  secondary_slot:
+    base: 0x03c000
+    size: 0x034000
+signature:
+  algorithm: ecdsa-p256
+  key_id: dev-trusted
+image:
+  header_size: 0x200
+  slot_size: 0x034000
+  align: 8
+  overwrite_only: true
+  downgrade_prevention: false
+security_counter:
+  enabled: false
+features:
+  - sig-ecdsa
+  - overwrite-only
+notes: |
+  Development-only signing keys. Overwrite-only mode does not provide the same
+  trial/confirm/revert semantics as swap modes.

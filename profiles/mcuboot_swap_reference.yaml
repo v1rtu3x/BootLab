@@ -1,0 +1,43 @@
+id: mcuboot_swap_reference
+name: MCUboot swap-scratch reference profile
+bootloader:
+  repository: https://github.com/mcu-tools/mcuboot
+  commit: 229068b6d34688ddc7286c6d2056527b72f03cf4
+  branch: main
+  description: |
+    Reference simulator configuration using swap-with-scratch on the nrf52840
+    flash layout. ECDSA-P256 signatures, image version policy, trial/confirm
+    trailer semantics, and downgrade-prevention flag are exercised.
+device:
+  name: nrf52840
+  align: 8
+  erased_value: 0xff
+  primary_slot:
+    base: 0x008000
+    size: 0x034000
+  secondary_slot:
+    base: 0x03c000
+    size: 0x034000
+  scratch:
+    base: 0x070000
+    size: 0x00d000
+signature:
+  algorithm: ecdsa-p256
+  key_id: dev-trusted
+  public_key_hash_format: full
+image:
+  header_size: 0x200
+  slot_size: 0x034000
+  align: 8
+  overwrite_only: false
+  downgrade_prevention: false
+security_counter:
+  enabled: false
+  initial: 1
+features:
+  - sig-ecdsa
+  - swap-scratch
+  - downgrade-prevention  # available, disabled by default in this profile
+notes: |
+  Development-only signing keys are generated on first corpus build.
+  Simulated reset/fault injection is logical only; not hardware fault resistance.

@@ -1,0 +1,41 @@
+id: mcuboot_swap_rsa2048_reference
+name: MCUboot swap-scratch reference profile with RSA-2048
+bootloader:
+  repository: https://github.com/mcu-tools/mcuboot
+  commit: 229068b6d34688ddc7286c6d2056527b72f03cf4
+  branch: main
+  description: |
+    Swap-with-scratch simulator configuration using RSA-2048 signatures.
+    Used to verify that the same assurance properties hold across signature
+    algorithms.
+device:
+  name: nrf52840
+  align: 8
+  erased_value: 0xff
+  primary_slot:
+    base: 0x008000
+    size: 0x034000
+  secondary_slot:
+    base: 0x03c000
+    size: 0x034000
+  scratch:
+    base: 0x070000
+    size: 0x00d000
+signature:
+  algorithm: rsa-2048
+  key_id: dev-trusted
+  public_key_hash_format: full
+image:
+  header_size: 0x200
+  slot_size: 0x034000
+  align: 8
+  overwrite_only: false
+  downgrade_prevention: false
+security_counter:
+  enabled: false
+  initial: 1
+features:
+  - sig-rsa
+  - swap-scratch
+notes: |
+  Development-only RSA-2048 signing keys are generated on first corpus build.

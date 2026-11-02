@@ -1,0 +1,29 @@
+id: V02
+name: downgrade-prevention-disabled-allows-older-control
+category: version
+profile: mcuboot_swap_reference
+primary:
+  name: v2.0.0-trusted
+  version: 2.0.0
+  trusted: true
+secondary:
+  name: v1.5.0-trusted
+  version: 1.5.0
+  trusted: true
+operation: stage_then_upgrade
+backend: mcuboot_sim
+backend_args:
+  cargo_test: downgrade_prevention
+  cargo_features: "sig-ecdsa overwrite-only"
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  outcome_in:
+    - old_authenticated_image
+    - new_authenticated_image
+    - secure_refusal
+notes: |
+  Control case: with downgrade prevention disabled, the downgrade_prevention
+  upstream test reports that the policy cap is absent. This is a positive
+  control for policy configuration, not a vulnerability.

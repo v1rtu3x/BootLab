@@ -1,0 +1,38 @@
+id: mcuboot_policy_downgrade_enabled
+name: MCUboot swap-scratch with downgrade prevention
+bootloader:
+  repository: https://github.com/mcu-tools/mcuboot
+  commit: 229068b6d34688ddc7286c6d2056527b72f03cf4
+  branch: main
+device:
+  name: nrf52840
+  align: 8
+  erased_value: 0xff
+  primary_slot:
+    base: 0x008000
+    size: 0x034000
+  secondary_slot:
+    base: 0x03c000
+    size: 0x034000
+  scratch:
+    base: 0x070000
+    size: 0x00d000
+signature:
+  algorithm: ecdsa-p256
+  key_id: dev-trusted
+image:
+  header_size: 0x200
+  slot_size: 0x034000
+  align: 8
+  overwrite_only: false
+  downgrade_prevention: true
+security_counter:
+  enabled: false
+features:
+  - sig-ecdsa
+  - swap-scratch
+  - downgrade-prevention
+notes: |
+  Same reference layout as mcuboot_swap_reference but with image-version
+  downgrade prevention enabled. Used to distinguish policy-on from policy-off
+  behavior for the same signed image corpus.

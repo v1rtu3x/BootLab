@@ -1,0 +1,46 @@
+id: mcuboot_key_rotation
+name: MCUboot key-rotation profile
+bootloader:
+  repository: https://github.com/mcu-tools/mcuboot
+  commit: 229068b6d34688ddc7286c6d2056527b72f03cf4
+  branch: main
+  description: |
+    Profile for trusted-key rotation exercises. The trusted set contains two
+    ECDSA-P256 keys: the original dev-trusted key and a rotation key
+    dev-trusted-2. Images signed with either key are accepted; images signed
+    with keys outside this set are rejected.
+device:
+  name: nrf52840
+  align: 8
+  erased_value: 0xff
+  primary_slot:
+    base: 0x008000
+    size: 0x034000
+  secondary_slot:
+    base: 0x03c000
+    size: 0x034000
+  scratch:
+    base: 0x070000
+    size: 0x00d000
+signature:
+  algorithm: ecdsa-p256
+  key_id: dev-trusted
+  trusted_key_ids:
+    - dev-trusted
+    - dev-trusted-2
+  public_key_hash_format: full
+image:
+  header_size: 0x200
+  slot_size: 0x034000
+  align: 8
+  overwrite_only: false
+  downgrade_prevention: false
+security_counter:
+  enabled: false
+  initial: 1
+features:
+  - sig-ecdsa
+  - swap-scratch
+notes: |
+  Development-only signing keys are generated on first corpus build.
+  The dev-untrusted key represents a revoked or never-trusted key.

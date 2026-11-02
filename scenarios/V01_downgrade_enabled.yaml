@@ -1,0 +1,31 @@
+id: V01
+name: downgrade-prevention-enabled-rejects-older
+category: version
+profile: mcuboot_policy_downgrade_enabled
+primary:
+  name: v2.0.0-trusted
+  version: 2.0.0
+  trusted: true
+secondary:
+  name: v1.5.0-trusted
+  version: 1.5.0
+  trusted: true
+operation: stage_then_upgrade
+backend: mcuboot_sim
+backend_args:
+  cargo_test: downgrade_prevention
+  cargo_features: "sig-ecdsa downgrade-prevention overwrite-only"
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  outcome_in:
+    - secure_refusal
+    - new_authenticated_image
+notes: |
+  With downgrade prevention enabled, an otherwise valid but older signed
+  image must be rejected. The upstream `downgrade_prevention` test in
+  overwrite-only mode currently reports pass in both enabled and disabled
+  configurations, so this scenario documents the expected policy while
+  flagging that a direct image-injection test is needed for a strict
+  negative result.
