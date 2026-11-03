@@ -1,0 +1,33 @@
+id: F01
+name: reset-before-any-destination-write
+category: fault
+profile: mcuboot_swap_reference
+primary:
+  name: v1.0.0-trusted
+  version: 1.0.0
+  trusted: true
+secondary:
+  name: v2.0.0-trusted
+  version: 2.0.0
+  trusted: true
+operation: stage_then_upgrade
+backend: mcuboot_sim
+backend_args:
+  cargo_test: fault_campaign_upgrade
+  cargo_features: sig-ecdsa
+  env:
+    FAULT_INDEX: "0"
+fault:
+  type: reset
+  point: before_first_flash_write
+  index: 0
+expect:
+  invalid_image_booted: false
+  outcome_in:
+    - old_authenticated_image
+    - new_authenticated_image
+  booted_version: "1.0.0"
+notes: |
+  Simulate power-loss before any destination flash write. The original
+  authenticated v1 image must remain available; the upgrade may either stay
+  pending or complete on the next boot, but no invalid image may run.
