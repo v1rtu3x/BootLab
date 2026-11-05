@@ -1,0 +1,24 @@
+id: A07
+name: rsa2048-untrusted-key-image-rejected
+category: authenticity
+profile: mcuboot_swap_rsa2048_reference
+secondary:
+  name: v2.0.0-untrusted-rsa2048
+  version: 2.0.0
+  trusted: false
+operation: stage_then_upgrade
+backend: imgtool_verify
+backend_args:
+  image: v2.0.0-untrusted-rsa2048.signed.bin
+  key_id: dev-trusted
+  key_type: rsa-2048
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  verify_rejected: true
+  outcome_in:
+    - secure_refusal
+notes: |
+  RSA-2048 variant of S02: an image signed with an untrusted key must be
+  rejected by imgtool verify.

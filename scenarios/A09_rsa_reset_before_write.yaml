@@ -1,0 +1,32 @@
+id: A09
+name: rsa2048-reset-before-any-destination-write
+category: fault
+profile: mcuboot_swap_rsa2048_reference
+primary:
+  name: v1.0.0-trusted-rsa2048
+  version: 1.0.0
+  trusted: true
+secondary:
+  name: v2.0.0-trusted-rsa2048
+  version: 2.0.0
+  trusted: true
+operation: stage_then_upgrade
+backend: mcuboot_sim
+backend_args:
+  cargo_test: fault_campaign_upgrade
+  cargo_features: sig-rsa
+  env:
+    FAULT_INDEX: "0"
+fault:
+  type: reset
+  point: before_first_flash_write
+  index: 0
+expect:
+  invalid_image_booted: false
+  outcome_in:
+    - old_authenticated_image
+    - new_authenticated_image
+  booted_version: "1.0.0"
+notes: |
+  RSA-2048 variant of F01: reset before any destination flash write must
+  converge to a valid boot outcome.

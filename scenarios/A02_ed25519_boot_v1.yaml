@@ -1,0 +1,24 @@
+id: A02
+name: ed25519-boot-v1-trusted
+category: baseline
+profile: mcuboot_swap_ed25519_reference
+primary:
+  name: v1.0.0-trusted-ed25519
+  version: 1.0.0
+  trusted: true
+secondary: null
+operation: boot
+backend: mcuboot_sim
+backend_args:
+  cargo_test: basic_revert
+  cargo_features: sig-ed25519
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  outcome_in:
+    - old_authenticated_image
+  booted_version: "1.0.0"
+notes: |
+  Baseline boot using Ed25519 signatures. Verifies the same happy-path
+  behavior as P01 under a different signature algorithm.

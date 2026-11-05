@@ -1,0 +1,24 @@
+id: A01
+name: rsa2048-boot-v1-trusted
+category: baseline
+profile: mcuboot_swap_rsa2048_reference
+primary:
+  name: v1.0.0-trusted-rsa2048
+  version: 1.0.0
+  trusted: true
+secondary: null
+operation: boot
+backend: mcuboot_sim
+backend_args:
+  cargo_test: basic_revert
+  cargo_features: sig-rsa
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  outcome_in:
+    - old_authenticated_image
+  booted_version: "1.0.0"
+notes: |
+  Baseline boot using RSA-2048 signatures. Verifies the same happy-path
+  behavior as P01 under a different signature algorithm.

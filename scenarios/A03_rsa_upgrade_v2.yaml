@@ -1,0 +1,27 @@
+id: A03
+name: rsa2048-stage-and-upgrade-v2-trusted
+category: baseline
+profile: mcuboot_swap_rsa2048_reference
+primary:
+  name: v1.0.0-trusted-rsa2048
+  version: 1.0.0
+  trusted: true
+secondary:
+  name: v2.0.0-trusted-rsa2048
+  version: 2.0.0
+  trusted: true
+operation: stage_then_upgrade
+backend: mcuboot_sim
+backend_args:
+  cargo_test: basic_revert
+  cargo_features: sig-rsa
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  outcome_in:
+    - new_authenticated_image
+  booted_version: "2.0.0"
+notes: |
+  RSA-2048 upgrade path. Mirrors P02 to show algorithm independence of
+  swap-scratch upgrade semantics.

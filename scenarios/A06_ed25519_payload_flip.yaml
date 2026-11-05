@@ -1,0 +1,24 @@
+id: A06
+name: ed25519-payload-bitflip-rejected
+category: integrity
+profile: mcuboot_swap_ed25519_reference
+secondary:
+  name: v2.0.0-trusted-payload-flip-ed25519
+  version: 2.0.0
+  trusted: false
+operation: stage_then_upgrade
+backend: imgtool_verify
+backend_args:
+  image: v2.0.0-trusted-payload-flip-ed25519.bin
+  key_id: dev-trusted
+  key_type: ed25519
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  verify_rejected: true
+  outcome_in:
+    - secure_refusal
+notes: |
+  Ed25519 variant of S01: a bit flipped in the authenticated payload after
+  signing must fail verification.

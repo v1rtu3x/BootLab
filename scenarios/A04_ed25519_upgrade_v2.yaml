@@ -1,0 +1,27 @@
+id: A04
+name: ed25519-stage-and-upgrade-v2-trusted
+category: baseline
+profile: mcuboot_swap_ed25519_reference
+primary:
+  name: v1.0.0-trusted-ed25519
+  version: 1.0.0
+  trusted: true
+secondary:
+  name: v2.0.0-trusted-ed25519
+  version: 2.0.0
+  trusted: true
+operation: stage_then_upgrade
+backend: mcuboot_sim
+backend_args:
+  cargo_test: basic_revert
+  cargo_features: sig-ed25519
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  outcome_in:
+    - new_authenticated_image
+  booted_version: "2.0.0"
+notes: |
+  Ed25519 upgrade path. Mirrors P02 to show algorithm independence of
+  swap-scratch upgrade semantics.
