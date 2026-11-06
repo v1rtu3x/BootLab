@@ -1,0 +1,23 @@
+id: K03
+name: revoked-key-image-rejected
+category: authenticity
+profile: mcuboot_key_rotation
+secondary:
+  name: v2.0.0-untrusted
+  version: 2.0.0
+  trusted: false
+operation: stage_then_upgrade
+backend: imgtool_verify
+backend_args:
+  image: v2.0.0-untrusted.signed.bin
+  key_path: fixtures/keys/dev-trusted-2-ecdsa-p256.pem
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  verify_rejected: true
+  outcome_in:
+    - secure_refusal
+notes: |
+  An image signed with a revoked or never-trusted key must be rejected even
+  when the trusted set contains the rotated dev-trusted-2 key.

@@ -1,0 +1,23 @@
+id: K01
+name: trusted-rotation-key-image-accepted
+category: authenticity
+profile: mcuboot_key_rotation
+secondary:
+  name: v2.0.0-trusted-2
+  version: 2.0.0
+  trusted: true
+operation: stage_then_upgrade
+backend: imgtool_verify
+backend_args:
+  image: v2.0.0-trusted-2.signed.bin
+  key_path: fixtures/keys/dev-trusted-2-ecdsa-p256.pem
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  verify_rejected: false
+  outcome_in:
+    - new_authenticated_image
+notes: |
+  An image signed with the rotated trusted key (dev-trusted-2) must verify
+  successfully when dev-trusted-2 is in the trusted set.

@@ -1,0 +1,23 @@
+id: K02
+name: old-trusted-key-rejected-after-rotation
+category: authenticity
+profile: mcuboot_key_rotation
+secondary:
+  name: v2.0.0-trusted
+  version: 2.0.0
+  trusted: false
+operation: stage_then_upgrade
+backend: imgtool_verify
+backend_args:
+  image: v2.0.0-trusted.signed.bin
+  key_path: fixtures/keys/dev-trusted-2-ecdsa-p256.pem
+fault:
+  type: none
+expect:
+  invalid_image_booted: false
+  verify_rejected: true
+  outcome_in:
+    - secure_refusal
+notes: |
+  After rotating to dev-trusted-2 as the only trusted key, an image signed
+  with the original dev-trusted key must be rejected.
