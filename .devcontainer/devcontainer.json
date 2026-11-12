@@ -1,0 +1,29 @@
+{
+  "name": "BootLab Lab",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": ".."
+  },
+  "features": {},
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.black-formatter",
+        "rust-lang.rust-analyzer",
+        "redhat.vscode-yaml"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/bootlab/.venv/bin/python",
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestPath": "/opt/bootlab/.venv/bin/pytest",
+        "python.testing.pytestArgs": ["-v"]
+      }
+    }
+  },
+  "containerEnv": {
+    "PYTHONPATH": "/opt/bootlab/src"
+  },
+  "postCreateCommand": "bootlab run-matrix",
+  "remoteUser": "root"
+}

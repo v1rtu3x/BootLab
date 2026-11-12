@@ -15,7 +15,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PATCH_DIR="$REPO_ROOT/vendor/mcuboot-patches"
 MCUBOOT_DIR="$REPO_ROOT/vendor/mcuboot"
 
-if [[ ! -d "$MCUBOOT_DIR/.git" ]]; then
+if ! git -C "$MCUBOOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "Error: vendor/mcuboot is not initialized." >&2
     echo "Run: git submodule update --init --recursive" >&2
     exit 1
