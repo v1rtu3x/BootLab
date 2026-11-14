@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>BootLab · visual guide</title>
+<style>
+:root{--bg:#09141c;--panel:#0c1822;--line:#304e5e;--fg:#eee9db;--muted:#a5bdc7;--accent:#e7b26b;--blue:#8bb8cb;color-scheme:dark}
+:root[data-theme=light]{--bg:#f3efe5;--panel:#f8f5ec;--line:#a4b5b7;--fg:#12354e;--muted:#516c78;--accent:#925e1a;--blue:#34697d;color-scheme:light}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.65 system-ui,sans-serif}main,header,footer{max-width:1024px;margin:auto;padding:28px 32px}header{padding-top:55px;padding-bottom:8px}.eyebrow,.number{font:12px/1.5 ui-monospace,monospace;letter-spacing:.12em;color:var(--accent)}h1{font-size:clamp(32px,5vw,48px);line-height:1.15;letter-spacing:-.035em;margin:16px 0}h2{font-size:23px;margin:0}p{color:var(--muted);max-width:75ch}a{color:var(--blue);text-underline-offset:4px}a:hover{color:var(--accent)}.controls{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:24px 0;padding:16px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}button,select{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:8px 12px;cursor:pointer}button:hover,select:hover{border-color:var(--accent)}button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:4px}.status{font-size:13px;color:var(--muted)}nav{display:flex;gap:8px 20px;flex-wrap:wrap;font-size:14px}article{scroll-margin-top:20px;margin-bottom:56px}.caption-head{display:flex;align-items:center;gap:16px}.asset{display:block;border-radius:7px;overflow:hidden;border:1px solid var(--line);background:var(--panel)}img{width:100%;height:auto;display:block}.links{font-size:13px;display:flex;gap:18px;flex-wrap:wrap;margin-top:12px}code{font-size:.9em;color:var(--fg)}.mobile-sample{max-width:440px;margin:24px auto}.notice{border-left:2px solid var(--accent);padding-left:16px;font-size:14px}footer{border-top:1px solid var(--line);padding-bottom:50px;font-size:14px}noscript{display:block;padding:16px;border:1px solid var(--line)}@media(max-width:600px){header,main,footer{padding-left:18px;padding-right:18px}.controls{gap:12px}.caption-head{align-items:baseline}h2{font-size:20px}}
+</style>
+</head>
+<body>
+<header>
+<div class="eyebrow">BOOTLAB / VISUAL FIELD GUIDE</div>
+<h1>Follow an update.<br>Understand the evidence.</h1>
+<p>Nine animated schematics explain the lab, from signed image checks to inspectable records. Select a theme or switch to still frames. Every diagram has a full-size PNG and GIF.</p>
+<p class="notice">These are explanatory illustrations, not recorded test executions. Read <a href="README.md">README.md</a> for setup and scope, and <a href="WALKTHROUGH.md">WALKTHROUGH.md</a> for the guided workflow.</p>
+<div class="controls" aria-label="Visual settings">
+<label for="theme">Theme <select id="theme"><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option></select></label>
+<button id="motion" type="button">Play animations</button>
+<span class="status" id="status" role="status">Still frames</span>
+</div>
+<nav aria-label="Scenes"><a href="#header">Overview</a><a href="#lifecycle">Decisions</a><a href="#verification">Verification</a><a href="#swap-overwrite">Update modes</a><a href="#trial-revert">Trial / revert</a><a href="#fault-injection">Reset recovery</a><a href="#algorithms">Algorithms</a><a href="#key-lifecycle">Key selection</a><a href="#evidence">Evidence</a></nav>
+</header>
+<main id="scenes">
+<noscript>JavaScript is optional for the documentation. Open the <a href="assets/animations/header-dark.png">overview still</a> or use the Markdown guides for every scene and accessible text explanations.</noscript>
+</main>
+<footer><p>Continue with the <a href="WALKTHROUGH.md">scenario walkthrough</a> or <a href="docs/README.md">documentation map</a>. Each scene is available as an animation or a full-size still. The gallery works locally without external assets or network requests.</p></footer>
+<script>
+const scenes=[
+ ['header','The lab at a glance','Thirty-three scenario definitions are grouped by purpose: boot and update, rejection, version policy, reset recovery, algorithms and key selection. The coverage scan is illustrative; it does not announce passing results.'],
+ ['lifecycle','Where update decisions happen','Image validation, the configured version policy and the selected update mode are separate concerns. Swap supports trial and revert; overwrite replaces the primary image without a swap-back copy.'],
+ ['verification','Check structure, integrity and signer','An intact image verified with the expected key can be accepted. Changed payload bytes or a different signing key should be rejected. Signature validity is separate from downgrade policy.'],
+ ['swap-overwrite','See what each update mode retains','The swap schematic follows one sector through scratch, primary and secondary. Overwrite replaces the primary sector without preserving the old one for rollback. The animation omits port-specific flash ordering.'],
+ ['trial-revert','Choose whether the new image persists','A confirmed trial image can persist. Without confirmation, a subsequent reset can lead to reversion. P03 maps to the upstream basic_revert test; P04 uses norevert, a permanent-update proxy.'],
+ ['fault-injection','Interrupt and resume a simulated update','A counted flash operation triggers a software interruption. On restart, the test checks convergence using persistent update state. FAULT_INDEX=0 disables injection; an operation index is not a verified physical flash phase.'],
+ ['algorithms','Ask the same questions of different signatures','ECDSA-P256, RSA-2048 and Ed25519 configurations share the lab workflow. Coverage is scenario-specific, and these cards do not compare speed or establish a security ranking.'],
+ ['key-lifecycle','Keep image signer and verification key distinct','K01 verifies an image signed by dev-trusted-2 with that key. K02 and K03 try the old or untrusted signer against dev-trusted-2. These are imgtool checks, not device trust-store rotation or revocation.'],
+ ['evidence','Read the full trail behind a verdict','Scenario YAML selects a backend; the oracle evaluates its output; a record, logs and a report preserve the result. Exit status and test counts are observed. Declared expected boot states need review against what the selected proxy and oracle actually check.']
+];
+const mediaTheme=matchMedia('(prefers-color-scheme: light)'),mediaMotion=matchMedia('(prefers-reduced-motion: reduce)');
+let playing=!mediaMotion.matches;
+const container=document.querySelector('#scenes');
+for(const [id,title,caption] of scenes){
+ const article=document.createElement('article');article.id=id;
+ const titleRow=document.createElement('div');titleRow.className='caption-head';
+ const number=document.createElement('span');number.className='number';number.textContent=String(scenes.findIndex(s=>s[0]===id)).padStart(2,'0');
+ const h2=document.createElement('h2');h2.textContent=title;titleRow.append(number,h2);
+ const paragraph=document.createElement('p');paragraph.textContent=caption;
+ const link=document.createElement('a');link.className='asset';link.dataset.open=id;link.setAttribute('aria-label',title+' — open full-size image');
+ const img=document.createElement('img');img.dataset.scene=id;img.alt=title+'. '+caption;img.width=960;img.height=530;img.loading='lazy';link.append(img);
+ const links=document.createElement('div');links.className='links';
+ for(const ext of ['png','gif']){const a=document.createElement('a');a.dataset.download=id;a.dataset.ext=ext;a.textContent=ext==='png'?'Full-size still (PNG)':'Animation (GIF)';links.append(a);}
+ article.append(titleRow,paragraph,link,links);container.append(article);
+}
+const mobile=document.createElement('details');mobile.innerHTML='<summary>View the compact overview</summary><div class="mobile-sample"><img data-scene="header" data-mobile="true" width="560" height="690" alt="Compact overview: BootLab uses MCUboot and imgtool with 33 scenario definitions in six groups."></div>';document.querySelector('#header').append(mobile);
+function theme(){return document.querySelector('#theme').value==='system'?(mediaTheme.matches?'light':'dark'):document.querySelector('#theme').value;}
+function asset(id,ext,mobile=false){return 'assets/animations/'+id+'-'+theme()+(mobile?'-mobile':'')+'.'+ext;}
+function refresh(){
+ document.documentElement.dataset.theme=theme();
+ for(const img of document.querySelectorAll('img[data-scene]'))img.src=asset(img.dataset.scene,playing?'gif':'png',img.dataset.mobile==='true');
+ for(const a of document.querySelectorAll('[data-download]'))a.href=asset(a.dataset.download,a.dataset.ext);
+ for(const a of document.querySelectorAll('[data-open]'))a.href=asset(a.dataset.open,playing?'gif':'png');
+ document.querySelector('#motion').textContent=playing?'Show still frames':'Play animations';
+ document.querySelector('#motion').setAttribute('aria-pressed',String(playing));
+ document.querySelector('#status').textContent=playing?'10-second loops · 20 frames per second':'Still frames · full narrative retained';
+}
+document.querySelector('#theme').addEventListener('change',refresh);
+document.querySelector('#motion').addEventListener('click',()=>{playing=!playing;refresh();});
+mediaTheme.addEventListener('change',refresh);mediaMotion.addEventListener('change',()=>{playing=!mediaMotion.matches;refresh();});refresh();
+</script>
+</body>
+</html>
