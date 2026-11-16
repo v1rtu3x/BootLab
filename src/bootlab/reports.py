@@ -30,13 +30,15 @@ class Report:
             f"Total cases: {len(self.records)}",
         ]
         passed = sum(1 for r in self.records if r.get("passed"))
-        failed = sum(1 for r in self.records if not r.get("passed"))
+        skipped = sum(1 for r in self.records if r.get("verdict") in {"SKIP", "NOT_EXECUTED"})
+        failed = len(self.records) - passed - skipped
         infra = sum(1 for r in self.records if r.get("infrastructure_error"))
         lines.extend(
             [
                 f"Passed: {passed}",
                 f"Failed: {failed}",
                 f"Infrastructure errors: {infra}",
+                f"Skipped / not executed: {skipped}",
                 "",
                 "## Results",
                 "",
@@ -67,6 +69,8 @@ class Report:
                     f"- **Category:** {r.get('category')}",
                     f"- **Profile:** {r.get('profile')}",
                     f"- **Backend:** {r.get('backend')}",
+                    f"- **Backend outcome:** {r.get('backend_outcome')}",
+                    f"- **Exit status:** {r.get('exit_status')}",
                     f"- **Verdict:** {r.get('verdict')}",
                     f"- **Elapsed:** {r.get('elapsed_seconds')} s",
                     f"- **Stdout:** {r.get('stdout_path')}",
@@ -99,6 +103,9 @@ class Report:
 
     def render_sanitized_markdown(self) -> str:
         """Render a public, sanitized report without host paths or raw logs."""
+        passed = sum(1 for r in self.records if r.get("passed"))
+        skipped = sum(1 for r in self.records if r.get("verdict") in {"SKIP", "NOT_EXECUTED"})
+        failed = len(self.records) - passed - skipped
         lines: list[str] = [
             "# BootLab Assurance Report (sanitized)",
             "",
@@ -123,9 +130,10 @@ class Report:
                 "",
                 "## Summary",
                 "",
-                f"Passed: {sum(1 for r in self.records if r.get('passed'))}",
-                f"Failed: {sum(1 for r in self.records if not r.get('passed'))}",
+                f"Passed: {passed}",
+                f"Failed: {failed}",
                 f"Infrastructure errors: {sum(1 for r in self.records if r.get('infrastructure_error'))}",
+                f"Skipped / not executed: {sum(1 for r in self.records if r.get('verdict') in {'SKIP', 'NOT_EXECUTED'})}",
                 "",
                 "## Limitations",
                 "",

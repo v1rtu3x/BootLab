@@ -10,7 +10,14 @@ import html
 import json
 import shutil
 from pathlib import Path
+import re
 from typing import Any
+
+
+def _record_slug(record: dict[str, Any]) -> str:
+    case_id = str(record.get("case_id", "case"))
+    run_id = str(record.get("run_id", "legacy"))
+    return re.sub(r"[^A-Za-z0-9_-]", "_", f"{case_id}-{run_id}")
 
 import yaml
 
@@ -31,6 +38,7 @@ class SiteGenerator:
         self._load_records()
         self._load_scenarios()
         self._prepare_output()
+        self._copy_referenced_logs()
         self._write_css()
         self._write_index()
         self._write_scenario_pages()
@@ -38,7 +46,7 @@ class SiteGenerator:
 
     def _load_records(self) -> None:
         evidence_dir = self.workspace / "evidence"
-        for record_path in sorted(evidence_dir.glob("*/record.json")):
+        for record_path in sorted(evidence_dir.rglob("record.json")):
             record = json.loads(record_path.read_text())
             self.records.append(record)
             if self.mcuboot_commit == "unknown" and record.get("mcuboot_commit"):
@@ -58,6 +66,18 @@ class SiteGenerator:
             shutil.rmtree(self.output_dir)
         (self.output_dir / "scenario").mkdir(parents=True)
         (self.output_dir / "assets").mkdir(parents=True)
+
+    def _copy_referenced_logs(self) -> None:
+        for record in self.records:
+            for key in ("stdout_path", "stderr_path"):
+                relative = record.get(key)
+                if not relative:
+                    continue
+                source = self.workspace / relative
+                if source.is_file():
+                    destination = self.output_dir / relative
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, destination)
 
     def _write_css(self) -> None:
         css = """\
@@ -183,6 +203,7 @@ h1, h2, h3 { margin-top: 0; }
 
 .badge-pass { background: var(--pass-bg); color: var(--pass); }
 .badge-fail { background: var(--fail-bg); color: var(--fail); }
+.badge-skip { background: #e2e8f0; color: #475569; }
 
 .heatmap {
   display: grid;
@@ -207,6 +228,7 @@ h1, h2, h3 { margin-top: 0; }
 
 .heatmap-pass { background: var(--pass); }
 .heatmap-fail { background: var(--fail); }
+.heatmap-skip { background: #64748b; }
 .heatmap-missing { background: var(--muted); }
 
 .panel {
@@ -293,13 +315,15 @@ pre {
     def _write_index(self) -> None:
         total = len(self.records)
         passed = sum(1 for r in self.records if r.get("passed"))
-        failed = total - passed
+        skipped = sum(1 for r in self.records if r.get("verdict") in {"SKIP", "NOT_EXECUTED"})
+        failed = total - passed - skipped
 
         cards = f"""
 <div class="cards">
   <div class="card"><h3>Total</h3><div class="value">{total}</div></div>
   <div class="card"><h3>Passed</h3><div class="value pass">{passed}</div></div>
   <div class="card"><h3>Failed</h3><div class="value fail">{failed}</div></div>
+  <div class="card"><h3>Skipped / not executed</h3><div class="value">{skipped}</div></div>
 </div>
 """
 
@@ -317,9 +341,10 @@ pre {
         heatmap_html = '<div class="heatmap">\n'
         for record in self.records:
             case_id = record.get("case_id", "?")
-            cls = "heatmap-pass" if record.get("passed") else "heatmap-fail"
+            slug = _record_slug(record)
+            cls = "heatmap-skip" if record.get("verdict") in {"SKIP", "NOT_EXECUTED"} else ("heatmap-pass" if record.get("passed") else "heatmap-fail")
             heatmap_html += (
-                f'  <a class="{cls}" href="scenario/{html.escape(case_id)}.html" '
+                f'  <a class="{cls}" href="scenario/{html.escape(slug)}.html" '
                 f'title="{html.escape(case_id)}">{html.escape(case_id)}</a>\n'
             )
         heatmap_html += "</div>"
@@ -331,10 +356,11 @@ pre {
             category = html.escape(record.get("category", "?"))
             backend = html.escape(record.get("backend", "?"))
             verdict = html.escape(str(record.get("verdict", "unknown")))
-            badge = "badge-pass" if record.get("passed") else "badge-fail"
+            badge = "badge-skip" if record.get("verdict") in {"SKIP", "NOT_EXECUTED"} else ("badge-pass" if record.get("passed") else "badge-fail")
+            slug = _record_slug(record)
             matrix_rows.append(
                 f"<tr>"
-                f'<td><a href="scenario/{case_id}.html">{case_id}</a></td>'
+                f'<td><a href="scenario/{html.escape(slug)}.html">{case_id}</a></td>'
                 f"<td>{name}</td>"
                 f"<td>{category}</td>"
                 f"<td>{backend}</td>"
@@ -344,7 +370,7 @@ pre {
 
         body = f"""
 <h1>Assurance Matrix</h1>
-<p>Live view of the BootLab scenario matrix. Green cells passed; red cells failed.</p>
+<p>Green cells passed, red cells failed, and gray cells were skipped or not executed.</p>
 {cards}
 {heatmap_html}
 <h2>Detailed Matrix</h2>
@@ -380,7 +406,7 @@ flowchart LR
             case_id = record.get("case_id", "?")
             scenario = self.scenarios.get(case_id, {})
             page = self._scenario_page(record, scenario)
-            (self.output_dir / "scenario" / f"{case_id}.html").write_text(page)
+            (self.output_dir / "scenario" / f"{_record_slug(record)}.html").write_text(page)
 
     def _scenario_page(
         self, record: dict[str, Any], scenario: dict[str, Any]
@@ -392,7 +418,7 @@ flowchart LR
         backend = html.escape(record.get("backend", "?"))
         verdict = html.escape(str(record.get("verdict", "unknown")))
         passed = record.get("passed", False)
-        badge_class = "badge-pass" if passed else "badge-fail"
+        badge_class = "badge-skip" if record.get("verdict") in {"SKIP", "NOT_EXECUTED"} else ("badge-pass" if passed else "badge-fail")
         timestamp = html.escape(record.get("timestamp_utc", "unknown"))
         elapsed = record.get("elapsed_seconds")
         elapsed_str = f"{elapsed:.3f} s" if elapsed is not None else "n/a"
@@ -418,10 +444,6 @@ flowchart LR
                 '<div class="panel"><h3>Scenario Notes</h3>\n'
                 f'<pre>{html.escape(str(notes).rstrip())}</pre></div>'
             )
-
-        scenario_yaml_path = self.workspace / "scenarios" / f"{case_id}_*.yaml"
-        # We don't know the exact filename; link generically isn't possible from glob.
-        # Instead rely on the scenario notes already embedded above.
 
         body = f"""
 <div class="back"><a href="../index.html">&larr; Back to matrix</a></div>
@@ -454,9 +476,9 @@ flowchart LR
         body = """
 <h1>About BootLab</h1>
 <p>
-  BootLab is a reproducible security lab that proves your bootloader does what it
-  promises. It wraps the official MCUboot simulator and signing tools to produce
-  machine-readable evidence for secure-boot and over-the-air update behavior.
+  BootLab records host image-verification results and selected MCUboot simulator
+  test assertions. The simulator tests use their own fixtures; this dashboard
+  does not claim direct board execution or general device assurance.
 </p>
 
 <div class="panel">
@@ -464,8 +486,8 @@ flowchart LR
   <ul>
     <li>Does a corrupted update get rejected?</li>
     <li>Does an untrusted signing key result in refusal?</li>
-    <li>Does downgrade prevention block older images?</li>
-    <li>Does the device recover when power is lost mid-update?</li>
+    <li>Which selected upstream assertions ran for a scenario?</li>
+    <li>Did a requested nonzero fault index reach an interruption point?</li>
   </ul>
 </div>
 

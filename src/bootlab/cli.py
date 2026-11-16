@@ -48,6 +48,43 @@ def main(ctx: click.Context, workspace: Path) -> None:
     ctx.obj["workspace"] = workspace.resolve()
 
 
+def _scenario_catalog(scenarios_dir: Path) -> list[tuple[Path, Scenario]]:
+    files = sorted(scenarios_dir.glob("*.yaml"))
+    scenarios = [(path, _load_scenario(path)) for path in files]
+    ids = [scenario.id for _, scenario in scenarios]
+    duplicates = sorted({case_id for case_id in ids if ids.count(case_id) > 1})
+    if duplicates:
+        raise click.ClickException(f"Duplicate scenario IDs: {', '.join(duplicates)}")
+    return scenarios
+
+
+def _load_scenario(path: Path) -> Scenario:
+    try:
+        return load_scenario(path)
+    except Exception as exc:
+        raise click.ClickException(f"Invalid scenario {path}: {exc}") from exc
+
+
+@main.command(name="validate-scenarios")
+@click.option("--scenarios-dir", default="scenarios", type=click.Path(path_type=Path))
+@click.option("--profiles-dir", default="profiles", type=click.Path(path_type=Path))
+@click.pass_context
+def validate_scenarios(ctx: click.Context, scenarios_dir: Path, profiles_dir: Path) -> None:
+    """Validate scenario schemas and references without running the simulator."""
+    ws = ctx.obj["workspace"]
+    catalog = _scenario_catalog(ws / scenarios_dir)
+    profile_files = sorted((ws / profiles_dir).glob("*.yaml"))
+    known_profiles = {path.stem for path in profile_files}
+    unknown = sorted({scenario.profile for _, scenario in catalog} - known_profiles)
+    if unknown:
+        raise click.ClickException(f"Unknown profile(s): {', '.join(unknown)}")
+    categories: dict[str, int] = {}
+    for _, scenario in catalog:
+        categories[scenario.category.value] = categories.get(scenario.category.value, 0) + 1
+    click.echo(f"Validated {len(catalog)} scenario definitions across {len(known_profiles)} profile files")
+    click.echo("Definitions by category: " + ", ".join(f"{key}={value}" for key, value in sorted(categories.items())))
+
+
 @main.command()
 @click.option(
     "--corpus-dir",
@@ -129,7 +166,7 @@ def baseline(ctx: click.Context, output: Path) -> None:
 def run_scenario(ctx: click.Context, scenario_file: Path) -> None:
     """Run a single scenario YAML file and record evidence."""
     ws = ctx.obj["workspace"]
-    scenario = load_scenario(scenario_file)
+    scenario = _load_scenario(scenario_file)
     adapter = McubootSimAdapter(ws)
     provenance = gather_provenance(ws)
 
@@ -139,7 +176,7 @@ def run_scenario(ctx: click.Context, scenario_file: Path) -> None:
     elapsed = time.perf_counter() - start
     oracle = evaluate(scenario, result)
     record_path = record_evidence(
-        ws, scenario, oracle, result.stdout, result.stderr, elapsed, provenance
+        ws, scenario, oracle, result.stdout, result.stderr, elapsed, provenance, result
     )
     click.echo(f"  verdict: {oracle.verdict}")
     click.echo(f"  evidence: {record_path}")
@@ -164,8 +201,9 @@ def run_scenario(ctx: click.Context, scenario_file: Path) -> None:
     default=None,
     help="Only run scenarios matching this profile ID.",
 )
+@click.option("--allow-skip", multiple=True, help="Scenario ID whose explicit SKIP is expected for this run.")
 @click.pass_context
-def run_matrix(ctx: click.Context, scenarios_dir: Path, report: Path, profile: str | None) -> None:
+def run_matrix(ctx: click.Context, scenarios_dir: Path, report: Path, profile: str | None, allow_skip: tuple[str, ...]) -> None:
     """Run scenario YAML files and produce an assurance report."""
     ws = ctx.obj["workspace"]
     scenarios_dir = ws / scenarios_dir
@@ -174,38 +212,48 @@ def run_matrix(ctx: click.Context, scenarios_dir: Path, report: Path, profile: s
     provenance = gather_provenance(ws)
     report_obj = Report(ws, provenance)
 
-    scenario_files = sorted(scenarios_dir.glob("*.yaml"))
-    if not scenario_files:
+    catalog = _scenario_catalog(scenarios_dir)
+    if not catalog:
         click.echo(f"No scenario files found in {scenarios_dir}")
         sys.exit(1)
 
     passed = 0
     failed = 0
-    for scenario_file in scenario_files:
-        scenario = load_scenario(scenario_file)
+    skipped = 0
+    unallowed_skips = 0
+    selected = 0
+    for scenario_file, scenario in catalog:
         if profile is not None and scenario.profile != profile:
             continue
-        click.echo(f"Running {scenario.id}: {scenario.name}")
+        selected += 1
         click.echo(f"Running {scenario.id}: {scenario.name}")
         start = time.perf_counter()
         result = adapter.run(scenario)
         elapsed = time.perf_counter() - start
         oracle = evaluate(scenario, result)
         record_path = record_evidence(
-            ws, scenario, oracle, result.stdout, result.stderr, elapsed, provenance
+            ws, scenario, oracle, result.stdout, result.stderr, elapsed, provenance, result
         )
         report_obj.add(record_path)
         if oracle.passed:
             passed += 1
             click.echo(f"  PASS: {oracle.verdict}")
+        elif oracle.verdict in {"SKIP", "NOT_EXECUTED"}:
+            skipped += 1
+            if scenario.id not in allow_skip:
+                unallowed_skips += 1
+            click.echo(f"  {oracle.verdict}: {oracle.details.get('reason', '')}")
         else:
             failed += 1
             click.echo(f"  FAIL: {oracle.verdict}")
 
+    if selected == 0:
+        raise click.ClickException(f"No scenarios matched profile {profile!r}")
     report_path = report_obj.write(report)
     click.echo(f"\nReport written to {report_path}")
-    click.echo(f"Passed: {passed}  Failed: {failed}")
-    sys.exit(0 if failed == 0 else 1)
+    click.echo(f"Passed: {passed}  Failed: {failed}  Skipped: {skipped}")
+    click.echo(f"Expected skips: {skipped - unallowed_skips}  Unapproved skips: {unallowed_skips}")
+    sys.exit(0 if failed == 0 and unallowed_skips == 0 else 1)
 
 
 @main.command()
@@ -223,7 +271,7 @@ def sanitize_report(ctx: click.Context, output: Path) -> None:
     provenance = gather_provenance(ws)
     report = Report(ws, provenance)
     evidence_dir = ws / "evidence"
-    for record_path in sorted(evidence_dir.glob("*/record.json")):
+    for record_path in sorted(evidence_dir.rglob("record.json")):
         report.add(record_path)
     path = report.write_sanitized(output)
     click.echo(f"Sanitized report written to {path}")
@@ -244,6 +292,7 @@ def sanitize_report(ctx: click.Context, output: Path) -> None:
     type=click.Path(path_type=Path),
     help="Path for the generated comparison report.",
 )
+@click.option("--allow-skip", multiple=True, help="Scenario ID whose explicit SKIP is expected for this comparison.")
 @click.pass_context
 def compare_profiles(
     ctx: click.Context,
@@ -251,6 +300,7 @@ def compare_profiles(
     profile_b: str,
     scenarios_dir: Path,
     report: Path,
+    allow_skip: tuple[str, ...],
 ) -> None:
     """Run two profiles and produce a comparative assurance report."""
     ws = ctx.obj["workspace"]
@@ -263,10 +313,14 @@ def compare_profiles(
 
     report_a = ReportGen(ws, provenance)
     report_b = ReportGen(ws, provenance)
+    catalog = _scenario_catalog(scenarios_dir)
+    profiles_found = {scenario.profile for _, scenario in catalog}
+    unknown = {profile_a, profile_b} - profiles_found
+    if unknown:
+        raise click.ClickException(f"Unknown profile(s): {', '.join(sorted(unknown))}")
 
     for profile, report_obj in [(profile_a, report_a), (profile_b, report_b)]:
-        for scenario_file in sorted(scenarios_dir.glob("*.yaml")):
-            scenario = load_scenario(scenario_file)
+        for scenario_file, scenario in catalog:
             if scenario.profile != profile:
                 continue
             click.echo(f"Running {scenario.id}: {scenario.name} ({profile})")
@@ -275,10 +329,12 @@ def compare_profiles(
             elapsed = time.perf_counter() - start
             oracle = evaluate(scenario, result)
             record_path = record_evidence(
-                ws, scenario, oracle, result.stdout, result.stderr, elapsed, provenance
+                ws, scenario, oracle, result.stdout, result.stderr, elapsed, provenance, result
             )
             report_obj.add(record_path)
 
+    if not report_a.records or not report_b.records:
+        raise click.ClickException("Both profile selections must contain at least one scenario")
     lines = [
         "# Cross-profile comparison",
         "",
@@ -288,12 +344,14 @@ def compare_profiles(
         "",
         "## Result summary",
         "",
-        f"| Profile | Passed | Failed | Total |",
-        "|---|---|---|---|",
+        f"| Profile | Passed | Failed | Skipped | Total |",
+        "|---|---|---|---|---|",
         f"| {profile_a} | {sum(1 for r in report_a.records if r.get('passed'))} | "
-        f"{sum(1 for r in report_a.records if not r.get('passed'))} | {len(report_a.records)} |",
+        f"{sum(1 for r in report_a.records if not r.get('passed') and r.get('verdict') not in {'SKIP', 'NOT_EXECUTED'})} | "
+        f"{sum(1 for r in report_a.records if r.get('verdict') in {'SKIP', 'NOT_EXECUTED'})} | {len(report_a.records)} |",
         f"| {profile_b} | {sum(1 for r in report_b.records if r.get('passed'))} | "
-        f"{sum(1 for r in report_b.records if not r.get('passed'))} | {len(report_b.records)} |",
+        f"{sum(1 for r in report_b.records if not r.get('passed') and r.get('verdict') not in {'SKIP', 'NOT_EXECUTED'})} | "
+        f"{sum(1 for r in report_b.records if r.get('verdict') in {'SKIP', 'NOT_EXECUTED'})} | {len(report_b.records)} |",
         "",
         "## Per-case comparison",
         "",
@@ -312,6 +370,16 @@ def compare_profiles(
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text("\n".join(lines) + "\n")
     click.echo(f"Comparison report written to {report}")
+    records = report_a.records + report_b.records
+    unsuccessful = sum(
+        1 for item in records
+        if not item.get("passed") and not (
+            item.get("verdict") in {"SKIP", "NOT_EXECUTED"} and item.get("case_id") in allow_skip
+        )
+    )
+    skipped = sum(1 for item in records if item.get("verdict") in {"SKIP", "NOT_EXECUTED"})
+    click.echo(f"Profile cases: {sum(1 for item in records if item.get('passed'))} passed, {unsuccessful} failed/unapproved, {skipped} skipped")
+    sys.exit(0 if unsuccessful == 0 else 1)
 
 
 @main.command()
@@ -363,19 +431,35 @@ def fault_sweep(
     ws = ctx.obj["workspace"]
     adapter = McubootSimAdapter(ws)
 
-    if indices:
-        idx_list = [int(x.strip()) for x in indices.split(",")]
+    if indices is not None:
+        try:
+            pieces = [x.strip() for x in indices.split(",")]
+            if any(not piece for piece in pieces):
+                raise ValueError("empty entry")
+            idx_list = [int(x) for x in pieces]
+        except ValueError as exc:
+            raise click.ClickException("--indices must be comma-separated non-negative integers") from exc
+        if not idx_list:
+            raise click.ClickException("--indices selection must not be empty")
+        if any(i < 0 for i in idx_list):
+            raise click.ClickException("fault indices must be >= 0")
+        if len(idx_list) != len(set(idx_list)):
+            raise click.ClickException("fault indices must not contain duplicates")
     else:
+        if start < 0 or (end is not None and end < 0):
+            raise click.ClickException("fault range values must be >= 0")
+        if end is not None and end < start:
+            raise click.ClickException("--end must be greater than or equal to --start")
         if end is None:
             max_ops = probe_total_ops(adapter, features)
             if max_ops is None:
                 click.echo("Failed to probe total flash operation count")
                 sys.exit(1)
-            end = max_ops
-            click.echo(f"Probed total ops: {end}")
+            end = max(max_ops.values())
+            click.echo(f"Probed {len(max_ops)} modeled configurations; maximum total ops: {end}")
         idx_list = list(range(start, end + 1))
 
-    click.echo(f"Running fault sweep over {len(idx_list)} indices ({idx_list[0]}..{idx_list[-1]})")
+    click.echo(f"Running fault sweep over {len(idx_list)} indices")
     results = sweep(adapter, idx_list, features, ws)
 
     csv = ws / csv
@@ -393,13 +477,13 @@ def fault_sweep(
 
 def _run_tutorial_scenario(ws: Path, scenario_file: Path) -> tuple[Any, Path]:
     """Run a scenario for the tutorial and return the oracle result and record path."""
-    scenario = load_scenario(scenario_file)
+    scenario = _load_scenario(scenario_file)
     adapter = McubootSimAdapter(ws)
     provenance = gather_provenance(ws)
     result = adapter.run(scenario)
     oracle = evaluate(scenario, result)
     record_path = record_evidence(
-        ws, scenario, oracle, result.stdout, result.stderr, None, provenance
+        ws, scenario, oracle, result.stdout, result.stderr, None, provenance, result
     )
     return oracle, record_path
 
@@ -509,11 +593,10 @@ def tutorial(ctx: click.Context, non_interactive: bool) -> None:
             "title": "How to read evidence",
             "body": (
                 "Every scenario writes a machine-readable evidence package:\n\n"
-                "• evidence/<id>/record.json — verdict, config, provenance, timing\n"
-                "• evidence/<id>/stdout.txt — captured standard output\n"
-                "• evidence/<id>/stderr.txt — captured standard error\n\n"
-                "Use these files to prove a test was run, re-run the same command later, "
-                "or share sanitized results without exposing host paths."
+                "• evidence/runs/<run-id>/<id>/record.json — verdict, config, provenance, timing\n"
+                "• stdout_path and stderr_path in the record — captured backend output\n\n"
+                "Use the exact test identity and assertion details to inspect what ran. "
+                "Signatures bind record and artifact hashes; they do not prove the experiment correct."
             ),
             "scenario": None,
         },
@@ -689,7 +772,7 @@ def _sign_record(
         {
             "algorithm": ED25519_SIGNATURE_ALGORITHM,
             "key_fingerprint": fingerprint,
-            "signature_path": str(sig_path.relative_to(record_path.parent.parent.parent)),
+            "signature_path": sig_path.name,
         }
     ]
     record_path.write_text(json.dumps(record, indent=2) + "\n")
@@ -712,7 +795,7 @@ def sign_evidence(ctx: click.Context, keys_dir: Path) -> None:
     fingerprint = _public_key_fingerprint(private_key.public_key())
 
     evidence_dir = ws / "evidence"
-    record_paths = sorted(evidence_dir.glob("*/record.json"))
+    record_paths = sorted(evidence_dir.rglob("record.json"))
     if not record_paths:
         click.echo("No evidence records found.")
         sys.exit(0)
@@ -724,30 +807,40 @@ def sign_evidence(ctx: click.Context, keys_dir: Path) -> None:
             click.echo(f"Signed {record_path.relative_to(ws)}")
 
     click.echo(f"Signed {signed} evidence record(s) with key {fingerprint}")
+    public_path = key_path.with_suffix(".pub.pem")
+    public_path.write_bytes(private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    ))
+    click.echo(f"Public verification key: {public_path}")
 
 
 @main.command(name="verify-evidence")
 @click.option(
-    "--keys-dir",
-    default="fixtures/keys",
-    type=click.Path(path_type=Path),
-    help="Directory containing the evidence signer key.",
+    "--public-key",
+    default="fixtures/keys/evidence-signer.pub.pem",
+    type=click.Path(path_type=Path, dir_okay=False),
+    help="Public Ed25519 key used to verify signatures.",
 )
 @click.pass_context
-def verify_evidence(ctx: click.Context, keys_dir: Path) -> None:
-    """Verify Ed25519 detached signatures for all evidence records."""
+def verify_evidence(ctx: click.Context, public_key: Path) -> None:
+    """Verify evidence records and referenced artifacts with a public key."""
     ws = ctx.obj["workspace"]
-    key_path = ws / keys_dir / "evidence-signer.pem"
-    if not key_path.exists():
-        click.echo(f"Signer key not found: {key_path}")
-        sys.exit(1)
-
-    private_key = _load_or_create_signer_key(key_path)
-    public_key = private_key.public_key()
-    fingerprint = _public_key_fingerprint(public_key)
+    public_path = public_key if public_key.is_absolute() else ws / public_key
+    if not public_path.is_file():
+        raise click.ClickException(f"Public verification key not found: {public_path}")
+    try:
+        verifier = serialization.load_pem_public_key(public_path.read_bytes())
+    except Exception as exc:
+        raise click.ClickException(f"Could not load public verification key: {exc}") from exc
+    if not isinstance(verifier, Ed25519PublicKey):
+        raise click.ClickException("Public verification key must be Ed25519")
+    fingerprint = _public_key_fingerprint(verifier)
 
     evidence_dir = ws / "evidence"
-    record_paths = sorted(evidence_dir.glob("*/record.json"))
+    record_paths = sorted(evidence_dir.rglob("record.json"))
+    if not record_paths:
+        raise click.ClickException("No evidence records found to verify")
     valid = 0
     invalid = 0
     for record_path in record_paths:
@@ -768,14 +861,40 @@ def verify_evidence(ctx: click.Context, keys_dir: Path) -> None:
             continue
 
         payload = _canonical_record_bytes(record)
-        signature = base64.b64decode(sig_path.read_text().strip())
         try:
-            public_key.verify(signature, payload)
-            valid += 1
-            click.echo(f"  VALID {record_path.relative_to(ws)}")
+            signature = base64.b64decode(sig_path.read_text().strip(), validate=True)
         except Exception:
             invalid += 1
-            click.echo(f"  INVALID {record_path.relative_to(ws)}")
+            click.echo(f"  INVALID signature encoding for {record_path.relative_to(ws)}")
+            continue
+        try:
+            verifier.verify(signature, payload)
+            base = record_path.parent
+            artifact_ok = True
+            for field in ("stdout", "stderr"):
+                artifact = record.get(f"{field}_path")
+                expected_hash = record.get("details", {}).get(f"{field}_sha256")
+                # Hashes are top-level in current records; tolerate older format only for signature checks.
+                expected_hash = record.get(f"{field}_sha256", expected_hash)
+                artifact_path = ws / artifact if artifact else None
+                if not artifact_path or not artifact_path.is_file() or not expected_hash or hashlib.sha256(artifact_path.read_bytes()).hexdigest() != expected_hash:
+                    artifact_ok = False
+            for input_info in record.get("input_sha256", {}).values():
+                input_path = ws / input_info["path"]
+                if not input_path.is_file() or hashlib.sha256(input_path.read_bytes()).hexdigest() != input_info["sha256"]:
+                    artifact_ok = False
+            scenario_config = record.get("scenario_configuration")
+            if scenario_config is not None:
+                scenario_bytes = json.dumps(scenario_config, sort_keys=True, separators=(",", ":")).encode()
+                if hashlib.sha256(scenario_bytes).hexdigest() != record.get("scenario_sha256"):
+                    artifact_ok = False
+            if not artifact_ok:
+                raise ValueError("referenced artifact hash mismatch or missing artifact")
+            valid += 1
+            click.echo(f"  VALID {record_path.relative_to(ws)}")
+        except Exception as exc:
+            invalid += 1
+            click.echo(f"  INVALID {record_path.relative_to(ws)}: {exc}")
 
     click.echo(f"Evidence signatures: {valid} valid, {invalid} invalid")
     sys.exit(0 if invalid == 0 else 1)

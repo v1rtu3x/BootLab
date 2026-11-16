@@ -14,7 +14,7 @@ SCENARIO_GROUPS = [
     ("Integrity", "S01, S03", "Offline verification of selected payload/header mutations."),
     ("Authenticity", "S02, S06", "Host key verification and a separate runtime bad-signature test."),
     ("Validation", "S04, S05", "Truncated-file verification and simulated slot-size rejection."),
-    ("Version policy", "V01, V02", "Enabled-policy refusal assertions; the disabled helper returns early."),
+    ("Version policy", "V01, V02", "V01 is an upstream refusal proxy; V02 is skipped because the disabled helper returns early."),
     ("Fault recovery", "F01–F04, F01O–F02O", "Numeric interruption campaigns; index 0 makes no cut."),
     ("Algorithm diversity", "A01–A10", "Selected simulator and verifier checks under RSA-2048 and Ed25519."),
     ("Key selection", "K01–K03", "Host verification against a selected key; no device trust-store update."),
@@ -31,6 +31,7 @@ STANDARDS = [
 def generate_onepager(workspace: Path, output: Path, provenance: dict[str, Any] | None = None) -> Path:
     """Write a Markdown one-pager summarizing the lab."""
     output.parent.mkdir(parents=True, exist_ok=True)
+    scenario_count = len(list((workspace / "scenarios").glob("*.yaml")))
 
     lines: list[str] = [
         "# BootLab — Secure Boot & OTA Assurance Lab",
@@ -45,7 +46,7 @@ def generate_onepager(workspace: Path, output: Path, provenance: dict[str, Any] 
         "2. **Intact** — not a single signed bit was modified.",
         "3. **Recoverable** — power loss mid-update does not brick the device.",
         "",
-        "BootLab explores those properties through **33 scenario definitions** around MCUboot and imgtool. "
+        f"BootLab explores those properties through **{scenario_count} scenario definitions** around MCUboot and imgtool. "
         "Several definitions share an upstream test; the matrix documents their actual checks and limits.",
         "",
         "## Scenario groups",
@@ -65,6 +66,8 @@ def generate_onepager(workspace: Path, output: Path, provenance: dict[str, Any] 
         "",
         "```bash",
         "cd BootLab",
+        "git submodule update --init --recursive",
+        "./scripts/apply-mcuboot-patches.sh",
         "python3 -m venv .venv && source .venv/bin/activate",
         "pip install -e '.[dev]'",
         "pip install ./vendor/mcuboot/scripts",
