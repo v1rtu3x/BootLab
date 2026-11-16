@@ -4,6 +4,8 @@
 
 **35 scenario definitions, two simulator modes, and explicit limits on each conclusion.** Run `bootlab validate-scenarios` to verify current definitions and profile contents. Current verdicts belong in run-scoped evidence, not permanent PASS badges here.
 
+The matrix runs each of the 35 YAML definitions once per invocation. Sections below group them by question and can overlap (for example, algorithm cases also appear under boot, integrity, or fault behavior), so their headings are not additive. A matching Cargo test contributes one executed test count; a fault campaign can emit observations for many modeled configurations. The current two-index campaign records 64 configurations at each index, or 128 configuration/index results.
+
 ## 01 / Read a row
 
 - **Direct simulator** means the `bootlab_direct_image` test with primary and candidate bytes injected into MCUboot's nrf52840 modeled slots. The adapter verifies image format, version, signature algorithm, trust expectation, and layout; the oracle checks injected hashes and final selection.

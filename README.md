@@ -197,7 +197,7 @@ The image factory also supports RSA-3072, but there is no dedicated RSA-3072 sce
 
 ## `06 / choose a scenario`
 
-The matrix contains **35 YAML definitions**. Each definition gets a separate execution record; several definitions share a Rust test body, and proxy cases use upstream fixtures.
+The matrix contains **35 YAML definitions**. Each definition gets a separate execution record; several definitions share a Rust test body, and proxy cases use upstream fixtures. The family rows below overlap by design—for example, algorithm cases also appear under boot, integrity, and fault families—so do not sum those family counts. Fault-sweep configuration observations are reported separately from scenario definitions.
 
 | Family | Cases | Question to investigate | Start here |
 |---|---:|---|---|
