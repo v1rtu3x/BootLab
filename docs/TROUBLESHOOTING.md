@@ -50,33 +50,34 @@ bootlab fuzz-image --help
 |---|---|---|
 | Rejection case reports `ERROR` | Traceback, invocation issue, timeout, or ambiguous verifier output is not a clean rejection | `stderr_path` in the run record and [findings policy](FINDINGS_POLICY.md) |
 | Different IDs produce similar simulator output | Several cases use the same Cargo filter | `backend_args.cargo_test` and the upstream test body |
-| Overwrite baseline passes without an obvious upgrade | Some revert helpers return early in overwrite mode | P01O/P02O notes in [the matrix](TEST_MATRIX.md) |
-| V02 reports `SKIP` | The pinned feature-disabled helper returns early and does not observe acceptance | Effective features and declared intent in V01/V02 records |
-| Fault index zero produces no reset | Counter decrements before comparison, so zero does not trigger a cut | [Counter explanation](FAULT_INJECTION.md#02--counter-behavior) |
-| Positive fault index is not counted | Current simulator output does not emit an explicit reached marker | Fault record outcome and raw test output |
-| Profile says swap, command says overwrite | The adapter executes `backend_args`, not the full profile file | V01/V02 effective Cargo features |
+| Direct image is rejected before Cargo runs | Image format/version, signing algorithm, trust declaration, or profile layout does not match | Error record and scenario profile/input files |
+| V01 refuses an older candidate but V02 accepts it | These direct cases differ only in the downgrade-prevention feature | Compare injected hashes and structured selection records |
+| Fault index zero produces no reset | Index zero is the no-cut baseline | [Counter explanation](FAULT_INJECTION.md#02--counter-behavior) |
+| Positive fault index is not reached | That configuration has fewer modeled operations or did not reach the requested count | `NOT_REACHED` row and configuration-specific operation count |
+| Fault sweep says missing/malformed result | Expected config identity/count set did not match test markers | Per-index stdout/stderr in the run archive |
+| Profile configuration does not match a direct scenario | The direct backend supports only its validated nrf52840 layout and feature set | Profile contents and scenario `cargo_features` |
 | “Rotation” case has no device activity | K01–K03 select one host verification key | [Key-case scope](../WALKTHROUGH.md#key-cases) |
 
 Do not fix a surprising result by weakening its expectation. First establish which input, test body, and assertion actually ran.
 
 ## 04 / Fault sweep output is incomplete
 
-The Python adapter normally runs Cargo without `--nocapture`. Successful Rust tests may therefore hide `FAULT_PROBE` or `FAULT_RESULT` lines from its parser. This can leave the automatic operation-count probe without a usable count or a sweep row without a descriptive note.
+The adapter requires one exact probe test, unique operation counts for every modeled configuration, and one complete result for each configuration at each requested index. Missing, malformed, duplicate, inconsistent, or unreachable results fail the sweep.
 
-Use an explicit bounded range:
+Run a bounded set of indices:
 
 ```bash
 bootlab fault-sweep --start 0 --end 10 --features sig-ecdsa
 ```
 
-This checks 11 indices. For human inspection of probe output, use the exact direct-Cargo command in [the extension guide](FAULT_INJECTION.md#03--reproduce-the-extension-directly). Counts can differ between modeled devices; they are not semantic sector/trailer labels.
+The default sweep uses the common reachable range across configurations. Explicit out-of-range requests remain `NOT_REACHED` failures. For human inspection of probe output, use the direct-Cargo command in [the extension guide](FAULT_INJECTION.md#03--reproduce-the-extension-directly). Counts are not semantic sector/trailer labels.
 
 ## 05 / Evidence and presentation problems
 
 | Symptom | Explanation / next action |
 |---|---|
 | Single case ran but matrix report is unchanged | `run-scenario` writes that case's files; `run-matrix` generates the aggregate report |
-| Old and new results appear together | Generators can read existing records from earlier runs; retain or separate runs deliberately |
+| Old and new results appear together | Select the intended `--run-id`; only `--all-runs` aggregates history |
 | Comparison command exits with failure | At least one selected case failed or was skipped; read its comparison table |
 | Record signature no longer verifies | Check whether a rerun or edit changed the JSON, whether the signature exists, and whether the local signer key matches |
 | Container results disappeared | A `--rm` container needs an evidence bind mount for host retention; see [Docker](DOCKER.md#03--keep-results-on-the-host) |

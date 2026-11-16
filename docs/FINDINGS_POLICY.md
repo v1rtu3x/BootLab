@@ -39,7 +39,7 @@ flowchart LR
 
 The oracle accepts only recognized validation-error output as a clean `imgtool verify` rejection. Tracebacks, invocation errors, timeouts, missing tools, and ambiguous nonzero exits are errors. `fuzz-image` uses the same rejection patterns and records accepted, rejected, crash, timeout, and execution-error outcomes.
 
-V01's wrapper expectation is permissive, although its selected upstream helper checks refusal; K01–K03 do not modify a device trust store; a fault-case pass does not by itself prove that its requested index was reached. These are [coverage limits](LIMITATIONS.md), not findings established by the documentation.
+Proxy cases remain limited to upstream fixture assertions; K01–K03 do not modify a device trust store. Direct D06 and the fault sweep require explicit reached markers before a positive-index result can pass. These are [coverage limits](LIMITATIONS.md), not findings established by the documentation.
 
 ## 04 / Share a reviewable report
 

@@ -18,10 +18,10 @@ product requirement -> security question -> actual experiment -> reviewed eviden
 | Integrity of update bytes | S01, S03, A05, A06 | Host verifier outcomes; no transport or device trace |
 | Authenticity of candidate images | S02, S06, A07, A08 | Separate offline key checks from simulator runtime assertions |
 | Malformed-input handling | S04, S05, fuzz reproducers | A verifier crash is different from clean rejection |
-| Update and trial behavior | P02, P03, P04; mode-specific checks | Shared upstream proxies; overwrite baseline helpers may skip |
-| Product version policy | V01, V02 | Enabled-policy upstream check exists; disabled helper does not exercise acceptance |
-| Recovery after interruption | F02, F03, F04, F02O | Confirm a cut was reached; no physical-power evidence |
-| Reviewable records | Records, logs, manifests, optional signatures | Record signatures do not cover referenced log contents |
+| Update and trial behavior | D01, P02, P03, P04 | D01 directly observes corpus image selection; remaining cases use upstream fixture assertions |
+| Product version policy | V01, V02 | Paired direct corpus inputs with refusal/acceptance observed |
+| Recovery after interruption | D06, F02, F03, F04, F02O | D06 asserts a reached modeled cut; no physical-power evidence |
+| Reviewable records | Run records, logs, immutable inputs, signatures | Record signatures authenticate hashes; they do not establish experiment correctness |
 
 BootLab does not evaluate update distribution, support commitments, disclosure/reporting processes, or the complete technical documentation for a product. Keep those work items separate from a successful bootloader experiment.
 
@@ -36,7 +36,7 @@ Use a product-owned requirement ID and the exact clause reference selected for t
 | Threat / rationale | `<threat ID and reason this check is relevant>` |
 | Effective configuration | `<MCUboot revision, local patch, Cargo features or board setup>` |
 | Executed case | `<scenario ID, backend, actual test/input>` |
-| Retained evidence | `<run archive>/evidence/runs/<run-id>/<id>/record.json`, stdout, stderr, input hashes |
+| Retained evidence | `evidence/runs/<run-id>/<id>/record.json`, stdout, stderr, immutable input hashes |
 | Observation and limit | `<what happened; what the experiment did not observe>` |
 | Review | `<owner, date, conclusion, unresolved work>` |
 

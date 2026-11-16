@@ -9,13 +9,16 @@ on:
 jobs:
   lint-and-unit:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
       - name: Install package
         run: |
           python -m pip install --upgrade pip
@@ -27,7 +30,9 @@ jobs:
           bootlab build-corpus
           bootlab validate-scenarios
       - name: Check formatting and lint
-        run: ruff check src tests
+        run: |
+          ruff format --check src tests
+          ruff check src tests
       - name: Run unit tests
         run: pytest -q
 
@@ -41,7 +46,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
       - name: Install package and imgtool
         run: |
           python -m pip install --upgrade pip
@@ -54,11 +59,25 @@ jobs:
       - name: Build image corpus
         run: bootlab build-corpus
       - name: Run assurance matrix
-        run: bootlab run-matrix --allow-skip P01O --allow-skip P02O --allow-skip V02
+        run: bootlab run-matrix
       - name: Cross-profile comparison
-        run: bootlab compare-profiles mcuboot_swap_reference mcuboot_overwrite_reference --allow-skip P01O --allow-skip P02O --allow-skip V02
+        run: bootlab compare-profiles mcuboot_policy_downgrade_enabled mcuboot_overwrite_reference --scenarios-dir scenarios
+      - name: Verify corpus mutation rejection
+        run: bootlab run-scenario scenarios/S01_payload_flip.yaml
       - name: Deterministic fault sweep
-        run: bootlab fault-sweep --start 0 --end 10 --features sig-ecdsa
+        run: bootlab fault-sweep --indices 0,1 --features sig-ecdsa
+      - name: Final direct run for portable evidence check
+        run: bootlab run-scenario scenarios/D01_direct_authenticated_upgrade.yaml
+      - name: Sign, verify, and export evidence
+        run: |
+          bootlab sign-evidence
+          bootlab verify-evidence
+          bootlab export-evidence --output /tmp/bootlab-evidence.tar.gz
+          mkdir -p /tmp/bootlab-evidence
+          tar -xzf /tmp/bootlab-evidence.tar.gz -C /tmp/bootlab-evidence
+          RUN_ID="$(basename "$(find /tmp/bootlab-evidence/evidence/runs -mindepth 1 -maxdepth 1 -type d | head -n 1)")"
+          bootlab --workspace /tmp/bootlab-evidence verify-evidence --run-id "$RUN_ID" \
+            --public-key fixtures/keys/evidence-signer.pub.pem
       - name: Sanitized report
         run: bootlab sanitize-report
       - name: Upload evidence
@@ -79,4 +98,17 @@ jobs:
         with:
           submodules: recursive
       - name: Build Docker image and run the Dockerfile smoke workflow
-        run: docker build --tag bootlab:ci .
+        run: |
+          docker build --tag bootlab:ci .
+          docker run --rm bootlab:ci validate-scenarios
+          mkdir -p evidence
+          docker run --rm -v "$PWD/evidence:/opt/bootlab/evidence" bootlab:ci \
+            run-scenario scenarios/D01_direct_authenticated_upgrade.yaml
+      - name: Upload Docker smoke evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          if-no-files-found: warn
+          retention-days: 14
+          name: docker-smoke-evidence
+          path: evidence/

@@ -2,7 +2,7 @@
 
 **See how an update is checked, installed, interrupted, and investigated.**
 
-A reproducible lab around MCUboot: 33 scenario definitions, two execution backends, and evidence you can inspect. The animations explain the mechanisms; your local reports contain the results.
+A reproducible lab around MCUboot: 35 scenario definitions, two execution backends, and evidence you can inspect. Six direct simulator cases inject signed corpus bytes into modeled flash; the remaining simulator proxies use upstream fixtures.
 
 <picture>
   <source media="(max-width: 640px) and (prefers-reduced-motion: reduce) and (prefers-color-scheme: light)" srcset="assets/animations/header-light-mobile.png">
@@ -12,7 +12,7 @@ A reproducible lab around MCUboot: 33 scenario definitions, two execution backen
   <source media="(max-width: 640px) and (prefers-color-scheme: light)" srcset="assets/animations/header-light-mobile.gif">
   <source media="(max-width: 640px)" srcset="assets/animations/header-dark-mobile.gif">
   <source media="(prefers-color-scheme: light)" srcset="assets/animations/header-light.gif">
-  <img src="assets/animations/header-dark.gif" alt="BootLab: 33 scenario definitions connect image verification, update recovery, and inspectable evidence." width="960">
+  <img src="assets/animations/header-dark.gif" alt="BootLab: 35 scenario definitions connect image verification, update recovery, and inspectable evidence." width="960">
 </picture>
 
 A visual guide to the lab. Coverage labels describe the repository, not the result of a test run.
@@ -50,10 +50,11 @@ The diagrams are conceptual: arrows show the update story, not a captured instru
 
 | Execution path | What actually runs | What the evidence supports |
 |---|---|---|
-| `mcuboot_sim` | Selected upstream Rust tests with images built inside the simulator | The selected tests and their internal assertions, under the requested Cargo features |
+| `mcuboot_sim` direct cases | `bootlab_direct_image` injects declared corpus bytes into the nrf52840 simulator flash layout | Injected SHA-256 hashes, bootloader selection, selected version, and final modeled state; no real application execution |
+| `mcuboot_sim` proxy cases | Selected upstream Rust tests with images built inside the simulator | The selected upstream test identity and its assertions under the requested Cargo features |
 | `imgtool_verify` | `imgtool verify` against a generated corpus image and selected key | Host-side image verification and its exit status |
 
-The corpus is **not injected into simulator flash** by the current adapter. Expected versions and states in YAML are scenario intent; the Python oracle does not independently parse a booted-image trace. See [evidence limitations](docs/LIMITATIONS.md) for the consequences.
+Direct scenarios validate image layout, header, signature algorithm, declared version, and trust expectation before injection. Rust observations are checked against the exact injected hashes. Proxy scenarios remain limited to upstream fixture assertions. No case executes application code or tests hardware. See [evidence limitations](docs/LIMITATIONS.md).
 
 ## `02 / run the lab`
 
@@ -72,38 +73,29 @@ bootlab validate-scenarios
 # Create development keys and signed / mutated image fixtures.
 bootlab build-corpus
 
-# Start with a single upstream simulator proxy.
-bootlab run-scenario scenarios/P01_boot_v1.yaml
+# Inject the corpus images and observe an authenticated upgrade.
+bootlab run-scenario scenarios/D01_direct_authenticated_upgrade.yaml
 
 # Evaluate all scenario definitions and write the report.
-bootlab run-matrix --allow-skip P01O --allow-skip P02O --allow-skip V02
+bootlab run-matrix
 
 # Compare a valid corpus image with an intentionally modified image.
 bootlab run-scenario scenarios/S01_payload_flip.yaml
 bootlab run-scenario scenarios/P01_boot_v1.yaml
 ```
 
-The CLI prints a verdict and a unique evidence record path. Inspect that
-record's `stdout_path`, `stderr_path`, selected test identity, and assertion
-details. `imgtool_verify` cases exercise generated corpus images directly;
-`mcuboot_sim` cases run named upstream tests with simulator-built fixtures.
-`P01O`, `P02O`, and `V02` are documented upstream early-return/unsupported
-proxies. They appear as `SKIP`; the command exits successfully only when the
-caller explicitly allows those IDs. `V01` is an upstream simulator proxy whose internal image assertions support
-refusal under the enabled feature; `V02` remains `SKIP` because the pinned
-feature-disabled helper returns early. Neither injects the declared BootLab
-images directly. A `PASS` is limited to assertions the backend actually executed; it
-is not a general bootloader guarantee. See [matrix notes](docs/TEST_MATRIX.md).
+The CLI prints a verdict and a run-scoped evidence record path. Inspect its logs, selected test identity, injected hashes, and observations. `D01`–`D03`, `V01`–`V02`, and `D06` inject corpus images directly. V01/V02 use identical trusted v2 and v1.5 image bytes with downgrade prevention enabled only in V01. D06 asserts a reached interruption followed by recovery. A pass supports the modeled bootloader decision only; it does not imply application execution or hardware behavior. See [matrix notes](docs/TEST_MATRIX.md).
 
 | Next step | Command |
 |---|---|
 | Follow the guided tutorial | `bootlab tutorial` |
 | Run the tutorial without prompts | `bootlab tutorial --non-interactive` |
 | Capture the upstream baseline log with a no-cut fault index | `FAULT_INDEX=0 bootlab baseline` |
-| Compare the reference profiles | `bootlab compare-profiles mcuboot_swap_reference mcuboot_overwrite_reference --allow-skip P01O --allow-skip P02O --allow-skip V02` |
+| Compare downgrade policy configurations | `bootlab compare-profiles mcuboot_policy_downgrade_enabled mcuboot_overwrite_reference` |
 | Run setup, matrix, comparison, and a small fault sweep | `./scripts/reproduce.sh` |
+| Sign, verify, and export the latest run | `bootlab sign-evidence && bootlab verify-evidence && bootlab export-evidence` |
 
-Development keys in `fixtures/keys/` are generated locally. Keep the corpus manifest and run provenance if you need to compare results; fresh keys, signatures, timestamps, and toolchain differences mean a new run need not produce identical bytes.
+Each invocation has one run ID under `evidence/runs/<run-id>/`; matrix and comparison records share that ID. Reports, dashboards, signing, and verification default to the latest run. Use `--run-id ID` to select history and `--all-runs` only for explicit aggregation. Input images and public verification keys are archived by content hash. `export-evidence` creates a portable tarball containing the run, logs, immutable inputs, and public signer key; private keys are excluded. Fresh signatures and timestamps can vary between runs.
 
 ## `03 / follow an image through verification`
 
@@ -162,8 +154,8 @@ BootLab's fault campaign interrupts modeled flash operations, retains simulated 
 In the current simulator, `FAULT_INDEX=0` makes **no cut**, while `1` cuts before the first counted operation. The `F03` and `F04` names describe intended boundary coverage, but their fixed indices do not establish a sector-copy or trailer location. Read the [fault-case explanations](WALKTHROUGH.md#fault-cases) before interpreting a sweep.
 
 ```bash
-bootlab fault-sweep --start 0 --end 10 --features sig-ecdsa
-# evidence/fault_table.csv and evidence/fault_table.json
+bootlab fault-sweep --indices 0,1 --features sig-ecdsa
+# evidence/runs/<run-id>/fault_table.csv and fault_table.json
 ```
 
 ## `05 / vary the algorithm and verification key`
@@ -205,19 +197,19 @@ The image factory also supports RSA-3072, but there is no dedicated RSA-3072 sce
 
 ## `06 / choose a scenario`
 
-The matrix contains **33 YAML definitions**. Several definitions share an upstream test filter, so 33 scenarios do not mean 33 independent simulator test bodies.
+The matrix contains **35 YAML definitions**. Each definition gets a separate execution record; several definitions share a Rust test body, and proxy cases use upstream fixtures.
 
 | Family | Cases | Question to investigate | Start here |
 |---|---:|---|---|
-| Baseline | 4 | How do boot and upgrade proxies behave in swap and overwrite configurations? | [P01–P02O](WALKTHROUGH.md#baseline-cases) |
+| Baseline | 7 | How do direct and proxy boot/upgrade paths behave? | [P01–P02](WALKTHROUGH.md#baseline-cases), [D01](WALKTHROUGH.md#direct-image-cases) |
 | Trial / confirm | 2 | Does the upstream flow revert an unconfirmed image and retain a confirmed one? | [P03–P04](WALKTHROUGH.md#trial-cases) |
 | Integrity / authenticity / validation | 6 | What happens to changed bytes, wrong keys, malformed images, and oversized candidates? | [S01–S06](WALKTHROUGH.md#verification-cases) |
-| Version policy | 2 | What does the selected downgrade test check with the feature enabled or absent? | [V01–V02](WALKTHROUGH.md#version-cases) |
-| Fault recovery | 6 | How does the simulator behave at selected interruption indices? | [F01–F04, F01O–F02O](WALKTHROUGH.md#fault-cases) |
+| Version policy | 2 | Does MCUboot refuse or accept the same older authenticated candidate? | [V01–V02](WALKTHROUGH.md#version-cases) |
+| Fault recovery | 9 | How does the simulator behave at selected interruption indices? | [F01–F04, F01O–F02O, D06](WALKTHROUGH.md#fault-cases) |
 | Algorithm diversity | 10 | How do the selected proxies behave under RSA-2048 and Ed25519? | [A01–A10](WALKTHROUGH.md#algorithm-cases) |
 | Verification-key lifecycle | 3 | Which images verify against the newly selected key? | [K01–K03](WALKTHROUGH.md#key-cases) |
 
-For exact filenames, Cargo features, and caveats, use the [full test matrix](docs/TEST_MATRIX.md). In particular, overwrite revert proxies can skip their body, and the feature-disabled downgrade control does not demonstrate an accepted downgrade.
+For exact filenames, Cargo features, and caveats, use the [full test matrix](docs/TEST_MATRIX.md).
 
 ## `07 / inspect and share the evidence`
 
@@ -235,25 +227,26 @@ A scenario definition selects the backend and expectation. The backend produces 
 <sub>Still image: [dark](assets/animations/evidence-dark.png) · [light](assets/animations/evidence-light.png)</sub>
 
 ```text
-evidence/
-├── P01/
-│   ├── record.json          verdict, backend arguments, provenance, timing
+evidence/runs/<run-id>/
+├── D01/
+│   ├── record.json          verdict, expectations, observations, provenance
 │   ├── stdout.txt           captured standard output
-│   └── stderr.txt           captured standard error
-└── report.md                aggregate matrix report
+│   ├── stderr.txt           captured standard error
+│   └── inputs/sha256/       immutable input images and public keys
+└── report.md                aggregate report for this invocation
 ```
 
-Start with `backend_args` and `details` in the record, then read both logs. An expected refusal can pass the scenario; a backend process failure needs investigation. The current negative `imgtool` oracle uses the exit status and does not distinguish every parser failure from clean rejection.
+Start with `declared_expectations`, `details`, and `input_sha256` in the record, then read both logs. An expected refusal can pass the scenario; a backend process failure needs investigation.
 
 | Output | Generate it | Read it |
 |---|---|---|
-| Sanitized report | `bootlab sanitize-report` | `evidence/report_sanitized.md` |
+| Sanitized report | `bootlab sanitize-report` | `evidence/runs/<latest-run>/report_sanitized.md` |
 | Local dashboard | `bootlab generate-site` | `out/site/index.html` |
 | One-page summary | `bootlab generate-onepager` | `out/onepager.md` |
-| Record signatures | `bootlab sign-evidence` then `bootlab verify-evidence` | `evidence/<case>/record.json.sig` |
+| Record signatures | `bootlab sign-evidence` then `bootlab verify-evidence` | `evidence/runs/<run-id>/<case>/record.json.sig` |
 | Dependency inventory | `bootlab generate-sbom` | `evidence/sbom.json` |
 
-Evidence signing authenticates the canonical record payload with a development Ed25519 key. It does not independently validate the test or sign the contents of the referenced logs. The SBOM is a CycloneDX-like inventory; validate it against your downstream requirements before integrating it.
+Evidence signing authenticates canonical record JSON, including hashes for logs, immutable inputs, and the public verification key. Export one run with `bootlab export-evidence`; the bundle includes the public signer key and can be verified in another directory without private keys. A signature does not independently validate the experiment. The SBOM is a CycloneDX-like inventory; validate it against your downstream requirements before integrating it.
 
 <details>
 <summary>Additional investigation commands</summary>

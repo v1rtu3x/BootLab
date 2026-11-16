@@ -54,7 +54,7 @@ The Python interface is:
 bootlab fault-sweep --indices 0,1,50 --features sig-ecdsa
 ```
 
-It writes sweep CSV/JSON plus per-index stdout/stderr under `evidence/fault_sweep/`. A positive index counts only when the per-configuration result explicitly reports `reached=true`; otherwise it is `NOT_REACHED` and fails coverage. Index zero is recorded as `NO_CUT_BASELINE`.
+It writes sweep CSV/JSON, per-configuration records, and per-index stdout/stderr under `evidence/runs/<run-id>/fault_sweep/`. Every requested index must return the complete probed configuration set. A positive index counts only when the per-configuration result explicitly reports `reached=true`; otherwise it is `NOT_REACHED` and fails coverage. Index zero is recorded as `NO_CUT_BASELINE`.
 
 ## 04 / Interpret the result
 

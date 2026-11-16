@@ -12,7 +12,7 @@
 # Interactive shell inside the lab:
 #   docker run --rm -it bootlab:latest bash
 
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -32,7 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.97.1
 RUN rustc --version && cargo --version
 
 # Set the working directory for the lab.
@@ -64,7 +64,7 @@ ENV VIRTUAL_ENV=/opt/bootlab/.venv \
 
 # Build fixtures and perform a bounded CLI smoke check during image creation.
 RUN bootlab build-corpus
-RUN bootlab validate-scenarios && bootlab run-scenario scenarios/P01_boot_v1.yaml
+RUN bootlab validate-scenarios && bootlab run-scenario scenarios/D01_direct_authenticated_upgrade.yaml
 
 # Make the CLI the default entrypoint; users can still override with `bash`.
 ENTRYPOINT ["bootlab"]

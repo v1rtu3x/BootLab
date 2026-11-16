@@ -4,6 +4,7 @@
     "dockerfile": "../Dockerfile",
     "context": ".."
   },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/BootLab,type=bind,consistency=cached",
   "features": {},
   "customizations": {
     "vscode": {
@@ -22,9 +23,9 @@
     }
   },
   "containerEnv": {
-    "PYTHONPATH": "/opt/bootlab/src"
+    "PYTHONPATH": "/workspaces/BootLab/src"
   },
-  "workspaceFolder": "/opt/bootlab",
+  "workspaceFolder": "/workspaces/BootLab",
   "postCreateCommand": "./scripts/apply-mcuboot-patches.sh && bootlab build-corpus && bootlab validate-scenarios",
   "remoteUser": "root"
 }

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Apply BootLab-specific patches to the vendored MCUboot simulator.
 #
-# These patches extend the upstream Rust simulator with deterministic fault
-# campaign helpers used by the BootLab Python harness. Run this after
-# initializing the submodule:
+# These patches extend the upstream Rust simulator with BootLab-owned
+# instrumentation. They can be applied to either the pinned submodule or a
+# source-only copy. Source-only compatibility is checked against the recorded
+# SHA-256 hashes of affected upstream files.
 #
 #   git submodule update --init --recursive
 #   ./scripts/apply-mcuboot-patches.sh
@@ -15,22 +16,65 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PATCH_DIR="$REPO_ROOT/vendor/mcuboot-patches"
 MCUBOOT_DIR="$REPO_ROOT/vendor/mcuboot"
 
-if ! git -C "$MCUBOOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    echo "Error: vendor/mcuboot is not initialized." >&2
-    echo "Run: git submodule update --init --recursive" >&2
+if [[ ! -f "$MCUBOOT_DIR/sim/Cargo.toml" ]]; then
+    echo "Error: vendor/mcuboot/sim/Cargo.toml is missing; provide the supported MCUboot source tree." >&2
+    exit 1
+fi
+if ! command -v git >/dev/null 2>&1; then
+    echo "Error: the Git patch utility is required even for source-only application." >&2
     exit 1
 fi
 
-cd "$MCUBOOT_DIR"
+git_available=false
+if command -v git >/dev/null 2>&1 && git -C "$MCUBOOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git_available=true
+    actual_revision="$(git -C "$MCUBOOT_DIR" rev-parse HEAD)"
+    expected_revision="$(git -C "$REPO_ROOT" ls-tree HEAD vendor/mcuboot 2>/dev/null | awk '{print $3}')"
+    if [[ -n "$expected_revision" && "$actual_revision" != "$expected_revision" ]]; then
+        echo "Error: MCUboot revision $actual_revision does not match the pinned submodule $expected_revision." >&2
+        exit 1
+    fi
+fi
+
+validate_source_only() {
+    local manifest="$1.source-hashes"
+    if [[ ! -f "$manifest" ]]; then
+        echo "Error: missing source compatibility manifest: $manifest" >&2
+        return 1
+    fi
+    while read -r expected relative; do
+        [[ -z "${expected:-}" || "$expected" == \#* ]] && continue
+        local source="$MCUBOOT_DIR/$relative"
+        if [[ "$expected" == "ABSENT" ]]; then
+            if [[ -e "$source" ]]; then
+                echo "Error: expected unpatched source path to be absent: $relative" >&2
+                return 1
+            fi
+        elif [[ ! -f "$source" ]]; then
+            echo "Error: required upstream source file is missing: $relative" >&2
+            return 1
+        else
+            local actual
+            actual="$(sha256sum "$source" | awk '{print $1}')"
+            if [[ "$actual" != "$expected" ]]; then
+                echo "Error: unsupported or modified source file $relative (SHA-256 $actual)." >&2
+                return 1
+            fi
+        fi
+    done < "$manifest"
+}
 
 for patch in "$PATCH_DIR"/*.patch; do
     if [[ -f "$patch" ]]; then
         name="$(basename "$patch")"
-        if git apply --check "$patch" >/dev/null 2>&1; then
-            echo "Applying $name ..."
-            git apply "$patch"
-        elif git apply --reverse --check "$patch" >/dev/null 2>&1; then
+        if (cd "$MCUBOOT_DIR" && git apply --reverse --check "$patch") >/dev/null 2>&1; then
             echo "$name is already applied."
+        elif (cd "$MCUBOOT_DIR" && git apply --check "$patch") >/dev/null 2>&1; then
+            if [[ "$git_available" == false ]]; then
+                validate_source_only "$patch"
+            fi
+            echo "Applying $name ..."
+            (cd "$MCUBOOT_DIR" && git apply "$patch")
         else
             echo "Error: $name does not apply cleanly and is not already applied." >&2
             echo "The submodule has incompatible or partially applied changes; inspect them before continuing." >&2

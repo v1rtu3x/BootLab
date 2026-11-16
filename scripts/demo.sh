@@ -1,35 +1,28 @@
 #!/usr/bin/env bash
-# Quick demo script for BootLab.
-# Run from the project root with the virtual environment activated.
+# Run the six direct corpus-image simulator cases from the project root.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-
 cd "${PROJECT_ROOT}"
 
-echo "==> BootLab quick demo"
-echo
+if ! command -v bootlab >/dev/null 2>&1; then
+    echo "bootlab is not on PATH; activate the project virtual environment first." >&2
+    exit 1
+fi
 
-echo "==> 1. Build corpus"
 bootlab build-corpus
+bootlab validate-scenarios
+for scenario in \
+    D01_direct_authenticated_upgrade \
+    D02_direct_payload_tamper \
+    D03_direct_untrusted_signer \
+    V01_downgrade_enabled \
+    V02_downgrade_disabled_control \
+    D06_direct_interruption_recovery; do
+    echo "==> $scenario"
+    bootlab run-scenario "scenarios/${scenario}.yaml"
+done
 
-echo
-echo "==> 2. Run a single baseline scenario"
-bootlab run-scenario scenarios/P01_boot_v1.yaml
-
-echo
-echo "==> 3. Run a single fault scenario"
-bootlab run-scenario scenarios/F01_reset_before_write.yaml
-
-echo
-echo "==> 4. Run full matrix"
-bootlab run-matrix
-
-echo
-echo "==> 5. Show summary"
-grep -E '^Total cases:|^Passed:|^Failed:' evidence/report.md || true
-
-echo
-echo "Demo complete. See evidence/report.md for the full report."
+echo "Direct simulator demo complete. Each case is archived under evidence/runs/<run-id>/."

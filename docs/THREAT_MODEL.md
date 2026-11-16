@@ -10,7 +10,7 @@
 |---|---|---|
 | Signing-key identity | Only images authorized by the selected key are accepted | Host key checks; selected simulator signature tests |
 | Firmware integrity | Changes to authenticated bytes are detected | Corpus mutations and runtime bad-secondary tests |
-| Version policy | Older signed images obey the configured downgrade rule | V01's upstream refusal assertions; direct corpus observations and an active disabled-policy acceptance control remain gaps |
+| Version policy | Older signed images obey the configured downgrade rule | V01/V02 inject identical authenticated corpus bytes and observe refusal/acceptance with only the downgrade feature changed |
 | Boot metadata | Update state remains consistent across modeled interruption | Fault helper checks images and trailers after completion |
 | Recoverability | Interrupted updates converge to the documented safe state | Simulator checks for the selected numeric indices |
 | Evidence integrity | A reviewer can tie results to inputs and configuration | JSON/log records, corpus manifest, optional record signatures |
@@ -28,7 +28,7 @@ flowchart LR
     class V,K,M trust;
 ```
 
-This is a conceptual boundary diagram. The host `imgtool` lane and simulator lane run separately; the diagram does not imply that a corpus image is transferred into simulator flash.
+This is a conceptual boundary diagram. Direct simulator cases transfer declared corpus bytes into modeled flash. Host-side `imgtool` checks validate signature expectations before injection; no real application is executed.
 
 ## 03 / Attacker capabilities
 

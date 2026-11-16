@@ -19,9 +19,9 @@ TARA means threat analysis and risk assessment. A BootLab case can contribute a 
 |---|---|---|
 | Are modified firmware bytes detected? | S01, S03, A05, A06 | Behavior on the deployed image-verification path |
 | Is the expected signer required? | S02, S06, A07, A08 | Product trust-anchor provisioning and configuration |
-| Does the intended update workflow operate? | P01–P04, overwrite variants | Direct observations where the current upstream proxy skips or shares behavior |
-| Is the version policy enforced? | V01/V02 | A paired active acceptance/refusal experiment with the same older candidate |
-| Does recovery preserve an allowed state? | F02/F03/F04/F02O | Reached fault location, actual board layout, product recovery policy |
+| Does the intended update workflow operate? | D01, D06; P01–P04 | Direct image selection and modeled recovery; proxy rows remain upstream-fixture evidence |
+| Is the version policy enforced? | V01/V02 | Same authenticated v2/v1.5 bytes with refusal/acceptance observed under paired features |
+| Does recovery preserve an allowed state? | D06, F02/F03/F04/F02O | Modeled reached interruption; actual board layout and product recovery policy still need evidence |
 | Can a signing key change safely? | K01–K03 | Device trust-store transition, reset persistence, and revocation handling |
 | Can the experiment be reviewed later? | Record, logs, corpus manifest | Complete run provenance and product requirement traceability |
 
@@ -38,7 +38,7 @@ Use a product-owned requirement ID and the exact clause reference selected for t
 | Threat / rationale | `<threat ID and reason this check is relevant>` |
 | Effective configuration | `<MCUboot revision, local patch, Cargo features or board setup>` |
 | Executed case | `<scenario ID, backend, actual test/input>` |
-| Retained evidence | `<run archive>/evidence/runs/<run-id>/<id>/record.json`, stdout, stderr, input hashes |
+| Retained evidence | `evidence/runs/<run-id>/<id>/record.json`, stdout, stderr, immutable input hashes |
 | Observation and limit | `<what happened; what the experiment did not observe>` |
 | Review | `<owner, date, conclusion, unresolved work>` |
 

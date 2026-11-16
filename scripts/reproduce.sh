@@ -41,17 +41,18 @@ run_reported() {
 }
 
 echo "==> Running full assurance matrix"
-run_reported bootlab run-matrix --allow-skip P01O --allow-skip P02O --allow-skip V02
+run_reported bootlab run-matrix
 
 echo "==> Generating cross-profile comparison"
-run_reported bootlab compare-profiles mcuboot_swap_reference mcuboot_overwrite_reference \
-    --allow-skip P01O --allow-skip P02O --allow-skip V02
+run_reported bootlab compare-profiles mcuboot_policy_downgrade_enabled mcuboot_overwrite_reference
 
 echo "==> Running small deterministic fault sweep"
-run_reported bootlab fault-sweep --start 0 --end 10 --features sig-ecdsa
+run_reported bootlab fault-sweep --indices 0,1 --features sig-ecdsa
 
-echo "==> Done. Reports:"
-echo "    evidence/report.md"
-echo "    evidence/comparison.md"
-echo "    evidence/fault_table.csv"
+echo "==> Run archives are under evidence/runs/<run-id>/ (each invocation has its own ID)."
+if [[ "$run_status" -eq 0 ]]; then
+    echo "All requested steps passed."
+else
+    echo "One or more steps failed; inspect each run archive and the step output." >&2
+fi
 exit "$run_status"

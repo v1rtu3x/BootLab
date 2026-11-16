@@ -2,7 +2,7 @@
 
 [Project overview](../README.md) · [Visual walkthrough](../WALKTHROUGH.md) · [Documentation map](README.md)
 
-**Record the environment used for each run.** Dependency ranges and a moving Rust stable channel mean the repository alone does not pin a byte-for-byte build environment.
+**Record the environment used for each run.** BootLab pins its Python package baseline and Rust toolchain; platform packages and MCUboot's imgtool still follow the pinned source and host image.
 
 ## 01 / Declared baseline
 
@@ -11,8 +11,8 @@
 | MCUboot upstream | [mcu-tools/mcuboot](https://github.com/mcu-tools/mcuboot) |
 | Reference commit in profiles | `229068b6d34688ddc7286c6d2056527b72f03cf4` |
 | BootLab package | `0.1.0` in [pyproject.toml](../pyproject.toml) |
-| Python | `>=3.10`; Docker base uses Python 3.11 |
-| Rust | Stable channel in the Docker build; record the resolved version |
+| Python | `>=3.10`; dependencies pinned in `pyproject.toml`; Docker uses Python 3.11 |
+| Rust | `1.97.1` from `rust-toolchain.toml` and the Docker build |
 | Simulator extension | Patched helpers and fault tests in `vendor/mcuboot-patches/`; apply with `./scripts/apply-mcuboot-patches.sh` after submodule init; see [fault-injection reference](FAULT_INJECTION.md) |
 
 The evidence writer records the vendor Git HEAD when available, or `unknown` otherwise. That identifier does not capture uncommitted vendor changes, submodule state, compiler flags, or the complete Python environment.
@@ -47,7 +47,7 @@ Use [the reproducibility guide](REPRODUCIBILITY.md) for installation. Native sim
 | Runtime signature lanes | ECDSA-P256, RSA-2048, Ed25519 |
 | Additional corpus algorithm | RSA-3072 |
 
-These are profile declarations, not hardware measurements. The adapter takes its executed features from each scenario's `backend_args.cargo_features`; it does not translate the whole profile into simulator configuration. V01/V02 are a visible example: both execute overwrite-only tests despite their profile naming.
+These are profile declarations, not hardware measurements. Direct scenarios validate the supported nrf52840 layout and reconcile Cargo features, signature algorithm, overwrite mode, downgrade mode, and slot geometry with their profile before running. Proxy tests use upstream fixtures and are not dynamically reconfigured from the full profile.
 
 ## 04 / Baseline logs
 

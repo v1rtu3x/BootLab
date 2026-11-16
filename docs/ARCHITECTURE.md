@@ -14,31 +14,33 @@ flowchart TB
     I --> V["imgtool verify"]
     B --> V
     B --> T["Cargo test filter + features"]
-    T --> F["Simulator builds its own fixtures"]
+    T --> F["Proxy: upstream fixtures"]
+    T --> D["Direct: inject corpus bytes"]
     V --> O["Oracle evaluates process result"]
     F --> O
+    D --> O
     O --> E["record.json + stdout + stderr"]
     E --> R["Report / dashboard / one-pager"]
     classDef step fill:#12354e,color:#f4f1e8,stroke:#e7b26b;
     class Y,S,C,I,V,T,F,O,E,R step;
 ```
 
-There is deliberately no arrow from the corpus to simulator flash: the current adapter does not perform that injection. A shared scenario label or version string does not make the two paths use identical bytes.
+Direct `bootlab_direct_image` scenarios inject declared corpus bytes into the modeled nrf52840 slots. Proxy simulator scenarios still use upstream fixtures; a shared label does not imply identical inputs.
 
 ## 02 / Follow one command
 
 From `BootLab/`, after setup and corpus generation:
 
 ```bash
-bootlab run-scenario scenarios/S01_payload_flip.yaml
+bootlab run-scenario scenarios/D01_direct_authenticated_upgrade.yaml
 ```
 
 | Step | Implementation | What happens |
 |---|---|---|
 | 1. Resolve workspace | [cli.py](../src/bootlab/cli.py), `main` | Uses the current directory unless `--workspace` selects another root |
 | 2. Load definition | [scenario.py](../src/bootlab/scenario.py), `load_scenario` | Parses YAML and validates fields with Pydantic |
-| 3. Select backend | [mcuboot_sim.py](../src/bootlab/backends/mcuboot_sim.py), `McubootSimAdapter.run` | Chooses `imgtool_verify` for S01 |
-| 4. Execute | `_run_imgtool_verify` | Resolves the image under `artifacts/corpus/` and invokes the selected key |
+| 3. Select backend | [mcuboot_sim.py](../src/bootlab/backends/mcuboot_sim.py), `McubootSimAdapter.run` | Chooses the direct image simulator path for D01 |
+| 4. Execute | `_run_cargo_test` | Validates both corpus images, injects their paths through environment variables, then runs exact Rust test |
 | 5. Evaluate | [oracles.py](../src/bootlab/oracles.py), `evaluate` | Compares the process result with the case expectation |
 | 6. Record | [evidence.py](../src/bootlab/evidence.py), `record_evidence` | Saves the verdict, backend arguments, timing, provenance, and logs |
 | 7. Return | `run_scenario` | Exits zero for an accepted oracle result, one otherwise |
@@ -61,14 +63,14 @@ Cargo receives the selected test name followed by `--exact --nocapture`; the ada
 | `backend` | Selects host verification or simulator execution |
 | `backend_args.image` and key fields | Choose actual verifier input and verification key |
 | `backend_args.cargo_test`, `cargo_features`, `env` | Choose the actual simulator invocation |
-| `profile` | Label for filtering/reporting; the profile YAML is not automatically applied by the adapter |
-| `primary`, `secondary`, `operation` | Describe intended scenario semantics; do not automatically stage corpus bytes in simulator flash |
-| `fault` | Describes intended interruption; actual simulator configuration comes from the environment in `backend_args` |
+| `profile` | Used for filtering/reporting; direct cases also validate its supported layout/features against the adapter model |
+| `primary`, `secondary`, `operation` | Direct cases resolve declared input names, versions, and trust expectations; proxy cases retain descriptive intent |
+| `fault` | Direct D06 matches `BOOTLAB_FAULT_INDEX`; proxy fault cases use `FAULT_INDEX` |
 | `expect.verify_rejected` | Controls host-verifier acceptance/rejection expectation |
 | `expect.outcome_in` | Used by selected oracle logic; not a list of independently observed runtime states |
-| `expect.booted_version`, `recovery_boots` | Declared intent; not independently measured by the Python adapter |
+| `expect.booted_version`, `recovery_boots` | Direct `booted_version` is checked against Rust observation; `recovery_boots` remains descriptive |
 
-Schema validation checks that the definition is structurally acceptable. It does not prove that every declared expectation is enforced. [Evidence limitations](LIMITATIONS.md) describes the most consequential examples.
+Schema validation checks that the definition is structurally acceptable. Direct fields are checked against the observed image selection; proxy expectations remain limited to their upstream assertions. [Evidence limitations](LIMITATIONS.md) describes the boundaries.
 
 ## 04 / Read the evidence in layers
 
@@ -90,16 +92,16 @@ The record connects the case and the oracle decision. The logs let you inspect t
 | `stdout_path`, `stderr_path` | Open captured output relative to the workspace |
 | `notes` | Read the scenario author's context; it is copied intent, not additional observation |
 
-`run-matrix` adds an aggregate report. `run-scenario` writes one case's record and logs without regenerating the matrix report. Running the same ID again replaces its case directory contents. Archive a complete run before further experiments if the previous result needs to remain reviewable.
+`run-matrix` creates one invocation run ID shared by all its case records and its report. `run-scenario` creates a separate ID for its record/log. Repeating a command does not replace an earlier run; reports, dashboards, signing, and verification default to the latest ID unless `--run-id` selects history.
 
-Evidence records bind scenario configuration, logs, available image hashes, source revisions, dirty state, and the local patch hash. Ed25519 signatures cover the canonical record; verification uses an explicitly supplied public key and checks referenced log/input hashes. A valid signature establishes integrity of the evidence package, not correctness of the experiment.
+Evidence records bind scenario configuration, logs, immutable input hashes, source revisions, dirty state, and the local patch hash. Ed25519 signatures cover canonical records that include the artifact hashes. Exported bundles include retained input bytes and public verification material; verification works without private keys or the current corpus. A valid signature establishes integrity of the evidence package, not correctness of the experiment.
 
 ## 05 / Where the other commands fit
 
 | Command family | Implementation | Input → output |
 |---|---|---|
 | `build-corpus` | [images.py](../src/bootlab/images.py) | Image recipes + keys → signed/mutated files + manifest |
-| `fault-sweep` | [fault_plan.py](../src/bootlab/fault_plan.py) | Numeric indices + features → per-index logs + CSV/JSON |
+| `fault-sweep` | [fault_plan.py](../src/bootlab/fault_plan.py) | Per-configuration operation counts + indices → run-scoped logs + CSV/JSON |
 | `fuzz-image` | [fuzz_image.py](../src/bootlab/fuzz_image.py) | Base image + seed → mutation outcomes + retained reproducers |
 | Reports | [reports.py](../src/bootlab/reports.py) | Records → readable summaries |
 | `generate-site` | [site_generator.py](../src/bootlab/site_generator.py) | Existing evidence → local dashboard |

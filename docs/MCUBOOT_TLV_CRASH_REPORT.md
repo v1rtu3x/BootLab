@@ -2,15 +2,19 @@
 
 ## Status
 
-The previous version of this note claimed a `struct.error` crash and linked to
-an external report directory that is not part of this repository. That crash
-claim has **not been reproduced or verified in this checkout**, and no upstream
-fix/report status is asserted here.
+The earlier crash claim has now been reproduced by the BootLab S04 run. With
+the generated `v2.0.0-trusted-truncated.bin` fixture and pinned `imgtool 2.1.0`,
+`imgtool verify` exits nonzero and raises `struct.error: unpack requires a
+buffer of 4 bytes` while parsing the truncated TLV. S04 now records this exact
+host-side verifier crash as its expected observation; other exceptions remain
+errors. This is not a claim about MCUboot device behavior or an upstream
+vulnerability determination.
 
-The repository pins MCUboot submodule revision
-`229068b6d34688ddc7286c6d2056527b72f03cf4`. The local environment used for
-this documentation change did not have `imgtool` installed and could not
-resolve package-index DNS, so there is no observed failure result to report.
+The run used a separate patched copy of the pinned MCUboot revision
+`229068b6d34688ddc7286c6d2056527b72f03cf4`. The test record captures the
+verifier output, exit status, fixture hash, and package version.
+Observed S04 truncated-file fixture SHA-256:
+`0cfd2e85296a7005c8dcd8b274bbd61b1cb523a9a52b93671fe4da9d404804f3`.
 
 ## Minimal experiment
 
@@ -43,13 +47,13 @@ PY
 imgtool verify -k fixtures/keys/dev-trusted-ecdsa-p256.pem /tmp/tlv-length-bad.bin
 ```
 
-The command's result must be classified from the actual output. If it raises an
-uncaught exception, preserve the reproducer and report it against the pinned
-revision using the project's findings process. Do not describe it as a
-confirmed upstream vulnerability or compliance failure without that evidence.
+The command's result must be classified from the actual output. A traceback is
+a host-tool crash, not a secure refusal. Do not describe this as a confirmed
+upstream vulnerability or compliance failure without the upstream findings
+process and assessment.
 
 ## Scope
 
-The existing `S04_truncated_tlv.yaml` uses a truncated file fixture. It is not
-this malformed-length experiment and does not establish parser-crash behavior.
-BootLab reports host-tool behavior only; it does not claim device execution.
+S04 uses a truncated file fixture. It is not the malformed-length experiment
+above, which mutates a specific TLV length. BootLab reports host-tool behavior
+only; it does not claim device execution.

@@ -13,7 +13,7 @@
 
 # BootLab — Visual Scenario Walkthrough
 
-Follow an update from **signed bytes → boot decision → recovery → evidence**. This guide explains all **33 scenario definitions**, shows the behavior each is intended to explore, and identifies what its current backend actually checks.
+Follow an update from **signed bytes → boot decision → recovery → evidence**. This guide explains all **35 scenario definitions**, shows the behavior each is intended to explore, and identifies what its current backend actually checks.
 
 The animations are conceptual illustrations. The commands and evidence records are how you inspect a real run.
 
@@ -23,14 +23,14 @@ The animations are conceptual illustrations. The commands and evidence records a
 
 | Start with a question | Read | Scenario IDs |
 |---|---|---|
-| How does an update reach the primary slot? | [Boot and upgrade](#baseline) | [P01](#p01), [P02](#p02), [P01O](#p01o), [P02O](#p02o) |
+| How does an update reach the primary slot? | [Boot and upgrade](#baseline) | [P01](#p01), [P02](#p02), [D01](#direct-image-cases) |
 | What happens if the application never confirms? | [Trial and confirmation](#trial) | [P03](#p03), [P04](#p04) |
 | What if signed bytes change? | [Integrity](#integrity) | [S01](#s01), [S03](#s03) |
 | What if the signer is untrusted? | [Authenticity](#authenticity) | [S02](#s02), [S06](#s06) |
 | What if the image is incomplete or too large? | [Image validation](#validation) | [S04](#s04), [S05](#s05) |
 | Can an older signed image be installed? | [Version policy](#version) | [V01](#v01), [V02](#v02) |
 | Do selected checks work with other algorithms? | [Algorithm variants](#algorithms) | [A01–A10](#a01) |
-| What happens at an interrupted flash operation? | [Fault campaign](#faults) | [F01](#f01), [F02](#f02), [F03](#f03), [F04](#f04), [F01O](#f01o), [F02O](#f02o) |
+| What happens at an interrupted flash operation? | [Fault campaign](#faults) | [F01](#f01), [F02](#f02), [F03](#f03), [F04](#f04), [F01O](#f01o), [F02O](#f02o), [D06](#direct-image-cases) |
 | How does selecting a different trusted key affect verification? | [Key selection](#keys) | [K01](#k01), [K02](#k02), [K03](#k03) |
 | What can I inspect and share after a run? | [Evidence and reports](#evidence) | All scenarios |
 
@@ -58,9 +58,10 @@ The primary slot holds the image selected for execution. The secondary slot stag
 | Backend | Executes | The Python oracle reads | Scope |
 |---|---|---|---|
 | `imgtool_verify` | `imgtool verify -k <key> <corpus-image>` | Process return code against `verify_rejected` | Offline verification of actual generated image bytes |
-| `mcuboot_sim` | `cargo test --features <features> -- <filter>` | Exit status and Cargo passed/failed counts | Simulator test assertions using the simulator's own images |
+| `mcuboot_sim` direct | Exact `bootlab_direct_image` Rust test, with corpus bytes injected into simulator slots | Injected hashes, structured selected-image/version output, final state, and test counts | MCUboot bootloader selection in a modeled layout; no app execution |
+| `mcuboot_sim` proxy | `cargo test --features <features> -- <filter>` | Exact test identity and Cargo counts | Upstream simulator assertions using upstream fixture images |
 
-**Scenario declarations and observations are different.** The simulator adapter does not load the YAML's primary/secondary corpus images into flash or parse an exact booted version. Values such as `booted_version: 2.0.0` describe intent; the record captures the selected test's result. Several IDs reuse the same test, and a Cargo filter can match multiple tests. A passing test can also contain a configuration-specific early return; those cases are called out below.
+Direct cases validate the declared image files, version, signature algorithm, trust result, and supported nrf52840 layout before injection. The record preserves each input by content hash, and the oracle compares those hashes with Rust observations. Proxy cases use upstream fixtures and only support the assertions their exact test makes. A Cargo filter may share one test body across scenarios, so each record also retains the executed identity and count.
 
 For offline negative cases, a nonzero `imgtool` exit satisfies the present oracle. Inspect `stderr.txt` to distinguish the expected verification refusal from another tool error. Missing executables, missing images, and adapter timeouts are recorded as infrastructure failures.
 
@@ -72,14 +73,14 @@ Complete the environment setup in the [README](README.md), then run commands fro
 # Generate all algorithm variants and development signing keys.
 bootlab build-corpus
 
-# One scenario, with captured output and a JSON verdict.
-bootlab run-scenario scenarios/P02_upgrade_v2.yaml
+# Inject exact corpus bytes and observe MCUboot's image decision.
+bootlab run-scenario scenarios/D01_direct_authenticated_upgrade.yaml
 
-# All 33 definitions, with an aggregate report.
+# All 35 definitions, with a run-scoped report.
 bootlab run-matrix
 ```
 
-A scenario writes `evidence/runs/<run-id>/<id>/record.json` and separate stdout/stderr files. Run IDs keep independent experiments. The matrix report reflects the checks that ran; the scenario count alone is not a count of independent security properties.
+A scenario writes `evidence/runs/<run-id>/<id>/record.json` and separate stdout/stderr files. One matrix invocation shares a run ID across all case records and its report. The scenario count is the number of declared checks, not the number of distinct Rust test bodies or independent security properties.
 
 <a id="baseline"></a>
 <a id="baseline-cases"></a>
@@ -152,34 +153,30 @@ bootlab run-scenario scenarios/P01_boot_v1.yaml
 bootlab run-scenario scenarios/P02_upgrade_v2.yaml
 ```
 
-<a id="p01o"></a>
+<a id="direct-image-cases"></a>
 
-### P01O — Trusted boot under the overwrite configuration
+### Direct corpus-image cases
 
-`baseline` · `mcuboot_overwrite_reference` · `mcuboot_sim`
+`mcuboot_sim` · nrf52840 model · ECDSA-P256
 
-**Question:** does initial boot work with overwrite enabled? The intended starting state is `primary [v1 trusted]`.
+These scenarios run the upstream MCUboot bootloader against the exact BootLab-generated bytes declared in YAML. The adapter checks the supported slot layout, header and image sizes, version, signature algorithm, trusted-root verification result, and selected root key. The Rust observation records the SHA-256 hashes and selected image/version; the Python oracle requires an exact Cargo test execution and compares the observed hashes against the injected files.
 
-**Current check:** `basic_revert` with `sig-ecdsa overwrite-only`. In the pinned simulator, `run_basic_revert()` returns immediately for overwrite mode. A Cargo pass here is a configuration smoke check, **not direct evidence of the intended boot**. The overwrite fault fixtures below provide stronger image-state checks.
+| ID | Primary / candidate | Required observation |
+|---|---|---|
+| D01 | Trusted v1.0 / trusted v2.0 | Candidate v2.0 selected |
+| D02 | Trusted v1.0 / payload-flipped v2.0 | Candidate rejected; primary v1.0 retained |
+| D03 | Trusted v1.0 / v2.0 signed by untrusted key | Candidate rejected; primary retained |
+| V01 | Trusted v2.0 / trusted v1.5, downgrade prevention on | Older candidate refused |
+| V02 | Same bytes as V01, downgrade prevention off | Older candidate accepted |
+| D06 | Trusted v1.0 / trusted v2.0 with modeled index 1 cut | Cut is reached; subsequent boot selects candidate and recovery checks pass |
 
-```bash
-bootlab run-scenario scenarios/P01_overwrite_boot.yaml
-```
-
-<a id="p02o"></a>
-
-### P02O — Trusted v2 overwrite upgrade
-
-`baseline` · `mcuboot_overwrite_reference` · `mcuboot_sim`
-
-**Question:** can the candidate replace primary without keeping a trial rollback image?
-
-**Concept:** `[primary v1 | secondary v2] → copy → [primary v2 | secondary v2]`.
-
-**Current check:** the `norevert` filter with `sig-ecdsa overwrite-only`. `run_norevert()` returns early in this configuration; the filter also matches `norevert_newimage`, which checks a primary image that should stay unchanged. This scenario's pass does not by itself demonstrate the depicted v1-to-v2 copy. See [F01O/F02O](#f01o) for the overwrite upgrade helper.
+The Rust test reports bootloader image selection and modeled flash state. It does not start or execute the firmware application and does not represent a hardware test.
 
 ```bash
-bootlab run-scenario scenarios/P02_overwrite_upgrade.yaml
+bootlab run-scenario scenarios/D01_direct_authenticated_upgrade.yaml
+bootlab run-scenario scenarios/V01_downgrade_enabled.yaml
+bootlab run-scenario scenarios/V02_downgrade_disabled_control.yaml
+bootlab run-scenario scenarios/D06_direct_interruption_recovery.yaml
 ```
 
 <a id="trial"></a>
@@ -368,9 +365,9 @@ An image must have a usable structure and fit the destination. These checks expl
 
 `validation` · `mcuboot_swap_reference` · `imgtool_verify`
 
-**Question:** does the verifier refuse an incomplete signed image?
+**Question:** what does the host verifier do with an incomplete signed image?
 
-**Current check:** the factory keeps the first half of the signed file as `v2.0.0-trusted-truncated.bin`. The scenario filename refers to TLV metadata, but this is a coarse file truncation, not a precise mutation of a chosen tag-length-value field. A recognized clean verifier refusal passes; a traceback, timeout, or ambiguous nonzero result does not. See the [TLV reproduction status](docs/MCUBOOT_TLV_CRASH_REPORT.md).
+**Current check:** imgtool 2.1.0 raises `struct.error` while unpacking the truncated TLV. The scenario requires that exact exception and records it as a reproduced host-side verifier crash. It does not claim a clean refusal or device behavior. See the [TLV reproduction report](docs/MCUBOOT_TLV_CRASH_REPORT.md).
 
 ```bash
 bootlab run-scenario scenarios/S04_truncated_tlv.yaml
@@ -408,8 +405,8 @@ An older image can still have a valid signature. Downgrade prevention adds a sep
           |                   |
    reject downgrade      no version-policy barrier
 
- Current coverage: V01 checks refusal in the upstream fixture.
-                   V02's helper returns early; acceptance is not observed.
+ Current coverage: V01 and V02 inject the same signed corpus images.
+                   The bootloader refuses with policy on and accepts with it off.
 ```
 
 Both scenario commands below select **overwrite-only** Cargo features. Their YAML profile labels do not change that executable configuration. These checks concern image-version policy; the profiles do not enable a hardware security counter.
@@ -420,11 +417,9 @@ Both scenario commands below select **overwrite-only** Cargo features. Their YAM
 
 `version` · declared profile `mcuboot_policy_downgrade_enabled` · `mcuboot_sim`
 
-**Question:** does the upstream fixture retain primary when presented with an older candidate under the enabled policy?
+**Question:** does MCUboot retain the authenticated v2 primary when presented with the older authenticated v1.5 candidate?
 
-**Current check:** `downgrade_prevention` with `sig-ecdsa downgrade-prevention overwrite-only`. The pinned `run_nodowngrade()` helper invokes MCUboot and checks that the original primary image remains.
-
-**Read the verdict:** the YAML allows both `secure_refusal` and `new_authenticated_image`. The current Python oracle therefore takes its success/control branch and reports `pass (control)` for Cargo success. The helper's assertions provide the refusal evidence; BootLab does not independently parse the candidate decision or exact versions. Narrowing the declaration and improving the oracle remain useful follow-up work.
+**Current check:** `bootlab_direct_image` injects the declared corpus files with `sig-ecdsa downgrade-prevention overwrite-only`. The structured observation must identify the unchanged v2 primary and report version 2.0.0. The oracle also verifies the input hashes and exact test count.
 
 ```bash
 bootlab run-scenario scenarios/V01_downgrade_enabled.yaml
@@ -434,11 +429,11 @@ bootlab run-scenario scenarios/V01_downgrade_enabled.yaml
 
 ### V02 — Downgrade-prevention feature disabled
 
-`version` · declared profile `mcuboot_swap_reference` · `mcuboot_sim`
+`version` · declared profile `mcuboot_overwrite_reference` · `mcuboot_sim`
 
-**Question:** how is the policy-disabled configuration represented?
+**Question:** does the otherwise identical configuration accept the older authenticated v1.5 image?
 
-**Current check:** the same upstream proxy with `sig-ecdsa overwrite-only`. The pinned helper returns early when prevention is disabled, so this scenario is `SKIP`; it does not establish acceptance of an older image. A paired direct-input test is required to observe the enabled/disabled contrast.
+**Current check:** the same direct test and same exact v2/v1.5 files as V01, with `sig-ecdsa overwrite-only`. The structured observation must identify candidate version 1.5.0. This paired comparison isolates the downgrade-prevention feature.
 
 ```bash
 bootlab run-scenario scenarios/V02_downgrade_disabled_control.yaml
@@ -593,7 +588,7 @@ bootlab run-scenario scenarios/A10_ed25519_reset_before_write.yaml
 
 ## `09 / interrupt and resume flash operations`
 
-The fault extension selects an operation count, invokes MCUboot, and resumes if the simulator interrupts execution. It checks final image and trailer state. This explores logical recovery at write/erase boundaries; it does not emulate a physical voltage glitch or a partially programmed flash cell.
+The fault extension selects an operation count, invokes MCUboot, and resumes if the simulator interrupts execution. It checks final image and trailer state. Direct D06 additionally injects the declared images and asserts that its requested interruption was reached. This explores logical recovery at write/erase boundaries; it does not emulate a physical voltage glitch or a partially programmed flash cell.
 
 <picture>
   <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: light)" srcset="assets/animations/fault-injection-light.png">
@@ -639,7 +634,7 @@ The pinned C simulator decrements its counter **before** each flash write or era
 
 The existing scenario filenames predate this clarification. In particular, `reset_before_write` uses zero and `reset_after_first_write` uses one. IDs and filenames are retained so commands and evidence remain traceable.
 
-F03/F04 choose larger counters. Their names suggest sector/trailer phases, but there is no captured address/phase trace establishing that mapping for every simulated device and configuration. Inspect the [extension notes](docs/FAULT_INJECTION.md) before claiming a specific cut location.
+F03/F04 choose later counters within the common reachable range. The simulator does not capture an address/phase trace, so neither case establishes a sector or trailer location. Inspect the [extension notes](docs/FAULT_INJECTION.md) before making a location-specific claim.
 
 <a id="f01"></a>
 
@@ -683,13 +678,13 @@ bootlab run-scenario scenarios/F03_sector_boundary.yaml
 
 <a id="f04"></a>
 
-### F04 — Swap operation index 570
+### F04 — Swap operation index 300
 
-`fault` · `mcuboot_swap_reference` · `FAULT_INDEX=570`
+`fault` · `mcuboot_swap_reference` · `FAULT_INDEX=300`
 
 **Question:** does the helper preserve its final image/trailer invariants for this larger selected counter?
 
-**Current check:** `fault_campaign_upgrade` at index 570. This only injects a cut if the run reaches that operation. The filename suggests trailer metadata, but neither the Python oracle nor the record proves that the interrupted operation was a trailer write. Avoid treating this case as evidence that all partial trailer writes recover.
+**Current check:** `fault_campaign_upgrade` at index 300. The selected index is within the observed common reachable range across configurations. The simulator does not report the operation's address or phase, so this is not evidence about a specific trailer write.
 
 ```bash
 bootlab run-scenario scenarios/F04_trailer_metadata.yaml
@@ -703,7 +698,7 @@ bootlab run-scenario scenarios/F04_trailer_metadata.yaml
 
 **Question:** does the permanent overwrite upgrade reach the helper's expected final state?
 
-**Current check:** `fault_campaign_upgrade` with `sig-ecdsa overwrite-only`. Zero runs without a cut. The helper checks the new primary and expected trailers; it does not require the old image in secondary for overwrite mode. This is a stronger upgrade-state check than the early-return baseline filters.
+**Current check:** `fault_campaign_upgrade` with `sig-ecdsa overwrite-only`. Zero runs without a cut. The helper checks the new primary and expected trailers; it does not require the old image in secondary for overwrite mode.
 
 ```bash
 bootlab run-scenario scenarios/F01_overwrite_reset_before_write.yaml
@@ -726,8 +721,8 @@ bootlab run-scenario scenarios/F02_overwrite_reset_after_first_write.yaml
 To explore additional indices and save a table:
 
 ```bash
-bootlab fault-sweep --start 0 --end 10 --features sig-ecdsa
-# evidence/fault_table.csv and evidence/fault_table.json
+bootlab fault-sweep --indices 0,1 --features sig-ecdsa
+# evidence/runs/<run-id>/fault_table.csv and fault_table.json
 ```
 
 <a id="keys"></a>
@@ -816,9 +811,10 @@ Start with the scenario's JSON record, follow its backend arguments to the exact
 ### Read one case
 
 ```bash
-python -m json.tool evidence/P02/record.json
-cat evidence/P02/stdout.txt
-cat evidence/P02/stderr.txt
+RUN_ID="$(ls -1 evidence/runs | sort | tail -n 1)"
+python -m json.tool "evidence/runs/$RUN_ID/D01/record.json"
+cat "evidence/runs/$RUN_ID/D01/stdout.txt"
+cat "evidence/runs/$RUN_ID/D01/stderr.txt"
 ```
 
 | Record field | What to look for |
@@ -834,44 +830,42 @@ cat evidence/P02/stderr.txt
 An evidence directory grows as you run the relevant commands:
 
 ```text
-evidence/
-├── P02/
-│   ├── record.json             run-scenario / run-matrix
-│   ├── stdout.txt
-│   ├── stderr.txt
-│   └── record.json.sig         added by sign-evidence
-├── report.md                   run-matrix
-├── report_sanitized.md         sanitize-report
-├── comparison.md               compare-profiles
-├── fault_table.csv             fault-sweep
-├── fault_table.json
-├── sbom.json                   generate-sbom
-├── fuzz_results.json           fuzz-image
-└── reproducers/                saved mutation findings, if any
+evidence/runs/<run-id>/
+├── D01/record.json              expectations, observations, provenance
+├── D01/stdout.txt               captured backend output
+├── D01/stderr.txt
+├── D01/inputs/sha256/            immutable images and public keys
+├── D01/record.json.sig           added by sign-evidence
+├── report.md                     run-matrix
+├── report_sanitized.md           sanitize-report
+├── comparison.md                 compare-profiles
+├── fault_table.csv/json          fault-sweep
+└── fault_sweep/                  per-index logs/configuration records
 
 out/
-├── site/index.html             generate-site
-└── onepager.md                 generate-onepager
+├── site/index.html               generate-site
+└── onepager.md                   generate-onepager
 ```
 
 ### Build the views you need
 
 ```bash
-# Aggregate all scenario results from this run.
+# Start a matrix invocation. It prints the run ID and writes a scoped report.
 bootlab run-matrix
-cat evidence/report.md
+RUN_ID="$(ls -1 evidence/runs | sort | tail -n 1)"
+cat "evidence/runs/$RUN_ID/report.md"
 
 # Summarize existing records without raw logs or host paths.
 bootlab sanitize-report
-cat evidence/report_sanitized.md
+cat "evidence/runs/$RUN_ID/report_sanitized.md"
 
 # Compare the existing scenario sets for these profile IDs.
-bootlab compare-profiles mcuboot_swap_reference mcuboot_overwrite_reference
-cat evidence/comparison.md
+bootlab compare-profiles mcuboot_policy_downgrade_enabled mcuboot_overwrite_reference
 
 # Add and verify detached signatures over canonical record content.
-bootlab sign-evidence
-bootlab verify-evidence
+bootlab sign-evidence --run-id "$RUN_ID"
+bootlab verify-evidence --run-id "$RUN_ID"
+bootlab export-evidence --run-id "$RUN_ID" --output /tmp/bootlab-run.tar.gz
 
 # Produce a dashboard, one-page summary, and dependency inventory.
 bootlab generate-site
@@ -879,7 +873,7 @@ bootlab generate-onepager
 bootlab generate-sbom
 ```
 
-`compare-profiles` compares selected cases; the two profiles do not necessarily contain identical coverage. Evidence signatures cover canonical record JSON with hashes for referenced logs and inputs. Verification uses the public key. A valid signature establishes integrity, not that an assertion proves more than the executed test.
+`compare-profiles` compares the paired direct V01/V02 downgrade cases. Reports, signing, and verification default to the latest run; `--run-id` selects history and `--all-runs` explicitly aggregates it. The export contains the public verification key and immutable inputs, not private keys. A valid signature establishes integrity, not correctness of the experiment.
 
 ### Explore parser mutations
 
