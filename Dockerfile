@@ -10,7 +10,7 @@
 #   docker run --rm bootlab:latest run-scenario scenarios/P01_boot_v1.yaml
 #
 # Interactive shell inside the lab:
-#   docker run --rm -it bootlab:latest bash
+#   docker run --rm -it --entrypoint bash bootlab:latest
 
 FROM python:3.11-slim-bookworm
 

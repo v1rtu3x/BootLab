@@ -27,6 +27,7 @@ app/*/build-*/
 
 # Editor and OS metadata
 .git/
+**/.git
 .gitignore
 .github/
 .vscode/

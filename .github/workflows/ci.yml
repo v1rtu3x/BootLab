@@ -31,8 +31,8 @@ jobs:
           bootlab validate-scenarios
       - name: Check formatting and lint
         run: |
-          ruff format --check src tests
-          ruff check src tests
+          python -m ruff format --check --config pyproject.toml src tests
+          python -m ruff check --config pyproject.toml src tests
       - name: Run unit tests
         run: pytest -q
 

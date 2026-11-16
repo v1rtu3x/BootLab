@@ -67,17 +67,25 @@ validate_source_only() {
 for patch in "$PATCH_DIR"/*.patch; do
     if [[ -f "$patch" ]]; then
         name="$(basename "$patch")"
-        if (cd "$MCUBOOT_DIR" && git apply --reverse --check "$patch") >/dev/null 2>&1; then
+        if reverse_output="$(cd "$MCUBOOT_DIR" && git apply --reverse --check "$patch" 2>&1)"; then
             echo "$name is already applied."
-        elif (cd "$MCUBOOT_DIR" && git apply --check "$patch") >/dev/null 2>&1; then
+        elif forward_output="$(cd "$MCUBOOT_DIR" && git apply --check "$patch" 2>&1)"; then
             if [[ "$git_available" == false ]]; then
                 validate_source_only "$patch"
             fi
             echo "Applying $name ..."
-            (cd "$MCUBOOT_DIR" && git apply "$patch")
+            if ! apply_output="$(cd "$MCUBOOT_DIR" && git apply "$patch" 2>&1)"; then
+                echo "Error: Git could not apply $name:" >&2
+                echo "$apply_output" >&2
+                exit 1
+            fi
         else
-            echo "Error: $name does not apply cleanly and is not already applied." >&2
-            echo "The submodule has incompatible or partially applied changes; inspect them before continuing." >&2
+            echo "Error: $name is neither applied nor cleanly applicable." >&2
+            echo "Git reverse-check output:" >&2
+            echo "$reverse_output" >&2
+            echo "Git forward-check output:" >&2
+            echo "$forward_output" >&2
+            echo "Inspect the source and patch state before retrying." >&2
             exit 1
         fi
     fi

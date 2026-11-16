@@ -17,6 +17,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ".[dev]"
 python -m pip install ./vendor/mcuboot/scripts
+python -m ruff check --config pyproject.toml src tests
+python -m ruff format --check --config pyproject.toml src tests
 bootlab validate-scenarios
 ```
 
