@@ -1,5 +1,5 @@
 id: mcuboot_policy_downgrade_enabled
-name: MCUboot swap-scratch with downgrade prevention
+name: MCUboot overwrite-only with downgrade prevention
 bootloader:
   repository: https://github.com/mcu-tools/mcuboot
   commit: 229068b6d34688ddc7286c6d2056527b72f03cf4
@@ -24,7 +24,7 @@ image:
   header_size: 0x200
   slot_size: 0x034000
   align: 8
-  overwrite_only: false
+  overwrite_only: true
   downgrade_prevention: true
 security_counter:
   enabled: false
@@ -33,6 +33,6 @@ features:
   - swap-scratch
   - downgrade-prevention
 notes: |
-  Same reference layout as mcuboot_swap_reference but with image-version
-  downgrade prevention enabled. Used to distinguish policy-on from policy-off
-  behavior for the same signed image corpus.
+  Overwrite-only simulator configuration with image-version downgrade
+  prevention enabled. A direct observed-state test is still required to claim
+  downgrade refusal.

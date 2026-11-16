@@ -21,11 +21,7 @@ expect:
   invalid_image_booted: false
   outcome_in:
     - secure_refusal
-    - new_authenticated_image
 notes: |
   With downgrade prevention enabled, an otherwise valid but older signed
-  image must be rejected. The upstream `downgrade_prevention` test in
-  overwrite-only mode currently reports pass in both enabled and disabled
-  configurations, so this scenario documents the expected policy while
-  flagging that a direct image-injection test is needed for a strict
-  negative result.
+  image must be rejected. The upstream proxy's internal assertion establishes
+  secure refusal, but does not test a BootLab-declared image input directly.

@@ -31,7 +31,7 @@ def _scenario(
 def _cargo_result(stdout: str, returncode: int = 0) -> SimulatorResult:
     return SimulatorResult(
         returncode=returncode,
-        stdout=stdout,
+        stdout=f"test basic_revert ... ok\n{stdout}" if "test basic_revert" not in stdout else stdout,
         stderr="",
         backend=Backend.MCUBOOT_SIM,
         backend_args={"cargo_test": "basic_revert"},
@@ -49,7 +49,7 @@ def test_imgtool_rejected_but_returncode_zero() -> None:
     result = SimulatorResult(
         returncode=0,
         stdout="",
-        stderr="",
+        stderr="Image has an invalid hash",
         backend=Backend.IMGTOOL_VERIFY,
         backend_args=scenario.backend_args,
     )
@@ -86,18 +86,24 @@ def test_invalid_image_booted_expectation_rejected() -> None:
     assert "invalid image boot" in oracle.verdict
 
 
-def test_version_enabled_but_cargo_passes() -> None:
-    """Downgrade-prevention-enabled scenario fails if cargo test passes."""
+def test_version_enabled_proxy_asserts_refusal_after_successful_execution() -> None:
+    """A successful enabled upstream test asserts its internal refusal state."""
     scenario = _scenario(
         Category.VERSION,
         Backend.MCUBOOT_SIM,
-        {"cargo_test": "downgrade_prevention"},
+        {"cargo_test": "downgrade_prevention", "cargo_features": "sig-ecdsa downgrade-prevention overwrite-only"},
         ExpectSpec(outcome_in=["secure_refusal"]),
     )
-    result = _cargo_result("test result: ok. 1 passed; 0 failed;")
+    result = SimulatorResult(
+        returncode=0,
+        stdout="test downgrade_prevention ... ok\ntest result: ok. 1 passed; 0 failed;",
+        stderr="",
+        backend=Backend.MCUBOOT_SIM,
+        backend_args={"cargo_test": "downgrade_prevention", "cargo_features": "sig-ecdsa downgrade-prevention overwrite-only"},
+    )
     oracle = evaluate(scenario, result)
-    assert oracle.passed is False
-    assert "downgrade was not rejected" in oracle.verdict
+    assert oracle.passed is True
+    assert oracle.verdict == "PASS: UPSTREAM_PROXY_REFUSAL"
 
 
 def test_version_disabled_but_cargo_fails() -> None:
@@ -108,10 +114,16 @@ def test_version_disabled_but_cargo_fails() -> None:
         {"cargo_test": "downgrade_prevention"},
         ExpectSpec(outcome_in=["new_authenticated_image"]),
     )
-    result = _cargo_result("test result: FAILED. 0 passed; 1 failed;", returncode=101)
+    result = SimulatorResult(
+        returncode=101,
+        stdout="test downgrade_prevention ... FAILED\ntest result: FAILED. 0 passed; 1 failed;",
+        stderr="",
+        backend=Backend.MCUBOOT_SIM,
+        backend_args={"cargo_test": "downgrade_prevention"},
+    )
     oracle = evaluate(scenario, result)
     assert oracle.passed is False
-    assert "control" in oracle.verdict
+    assert oracle.verdict == "FAIL"
 
 
 def test_fault_scenario_cargo_test_fails() -> None:
@@ -119,10 +131,16 @@ def test_fault_scenario_cargo_test_fails() -> None:
     scenario = _scenario(
         Category.FAULT,
         Backend.MCUBOOT_SIM,
-        {"cargo_test": "some_fault_test"},
+        {"cargo_test": "fault_campaign_upgrade", "env": {"FAULT_INDEX": "1"}},
         ExpectSpec(),
     )
-    result = _cargo_result("test result: FAILED. 0 passed; 1 failed;", returncode=101)
+    result = SimulatorResult(
+        returncode=101,
+        stdout="FAULT_RESULT configuration=nrf52840-align-8-erased-ff index=1 reached=true operation_count=406 recovery_ok=false primary_image_valid=false secondary_image_valid=true primary_trailer_valid=true secondary_trailer_valid=true\ntest fault_campaign_upgrade ... FAILED\ntest result: FAILED. 0 passed; 1 failed;",
+        stderr="",
+        backend=Backend.MCUBOOT_SIM,
+        backend_args={"cargo_test": "fault_campaign_upgrade", "env": {"FAULT_INDEX": "1"}},
+    )
     oracle = evaluate(scenario, result)
     assert oracle.passed is False
     assert "recovery" in oracle.verdict

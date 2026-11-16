@@ -1,5 +1,5 @@
 id: F02O
-name: overwrite-reset-after-first-successful-write-step
+name: overwrite-interruption-before-first-counted-operation
 category: fault
 profile: mcuboot_overwrite_reference
 primary:
@@ -19,7 +19,7 @@ backend_args:
     FAULT_INDEX: "1"
 fault:
   type: reset
-  point: after_first_successful_flash_write
+  point: before_counted_operation_1
   index: 1
 expect:
   invalid_image_booted: false
@@ -27,4 +27,5 @@ expect:
     - old_authenticated_image
     - new_authenticated_image
 notes: |
-  Overwrite-only fault comparison: reset after first successful write step.
+  Interrupt before the first counted operation if the counter reaches it;
+  evidence records whether the interruption point was reached.

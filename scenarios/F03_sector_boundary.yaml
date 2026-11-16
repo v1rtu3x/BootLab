@@ -1,5 +1,5 @@
 id: F03
-name: interrupt-at-sector-copy-boundary
+name: swap-interruption-at-operation-index-50
 category: fault
 profile: mcuboot_swap_reference
 primary:
@@ -19,7 +19,7 @@ backend_args:
     FAULT_INDEX: "50"
 fault:
   type: reset
-  point: sector_copy_boundary
+  point: before_counted_operation_50
   index: 50
 expect:
   invalid_image_booted: false
@@ -27,5 +27,5 @@ expect:
     - old_authenticated_image
     - new_authenticated_image
 notes: |
-  Representative interruption at a sector-copy boundary during the swap.
-  The bootloader must resume and converge to a valid boot outcome.
+  Interrupt before modeled operation 50 if the counter reaches it. The
+  simulator does not identify this numeric index as a sector-copy boundary.

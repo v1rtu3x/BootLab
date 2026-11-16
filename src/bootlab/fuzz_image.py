@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import struct
 import subprocess
 import tempfile
@@ -38,26 +39,13 @@ TLV_SIZE = 4
 SIG_TLV_TYPES = {0x20, 0x22, 0x23, 0x24, 0x25}
 
 # Substrings that indicate imgtool rejected the image in the expected way.
-REJECTED_HINTS = (
-    "invalid",
-    "Invalid",
-    "No signature",
-    "Wrong",
-    "error",
-    "Error",
-    "cannot",
-    "Cannot",
-    "not found",
-    "bad",
-    "Bad",
-    "failed",
-    "Failed",
-    "malformed",
-    "Malformed",
-    "does not match",
-    "unable",
-    "Unable",
-    "was not",
+REJECTION_PATTERNS = (
+    r"invalid (?:hash|signature|image|tlv)",
+    r"no signature",
+    r"signature .* (?:does not match|verification failed|invalid)",
+    r"image .* (?:not valid|invalid|rejected)",
+    r"unable to verify signature",
+    r"hash .* (?:mismatch|invalid)",
 )
 
 
@@ -94,6 +82,8 @@ class FuzzSummary:
     rejected: int
     accepted: int
     crashes: int
+    timeouts: int
+    errors: int
     early_stop: bool
     stop_reason: str | None
 
@@ -335,14 +325,27 @@ MUTATORS: list[Callable[[bytearray, ImageInfo, random.Random], str]] = [
 
 def run_verify(image_path: Path, key_path: Path) -> tuple[int, str, str]:
     """Run ``imgtool verify`` and return (returncode, stdout, stderr)."""
-    result = subprocess.run(
-        ["imgtool", "verify", "-k", str(key_path), str(image_path)],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    return result.returncode, result.stdout, result.stderr
+    try:
+        result = subprocess.run(
+            ["imgtool", "verify", "-k", str(key_path), str(image_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+        return result.returncode, result.stdout, result.stderr
+    except subprocess.TimeoutExpired as exc:
+        return 124, _output_text(exc.stdout), _output_text(exc.stderr) or "imgtool verification timed out"
+    except (OSError, PermissionError) as exc:
+        return 127, "", f"imgtool execution error: {exc}"
+
+
+def _output_text(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value
 
 
 def classify_outcome(returncode: int, stdout: str, stderr: str) -> tuple[str, str | None]:
@@ -351,9 +354,13 @@ def classify_outcome(returncode: int, stdout: str, stderr: str) -> tuple[str, st
     Returns a tuple of (outcome, crash_type). crash_type is a short label such
     as "struct.error" or "ValueError" when outcome is "crash".
     """
-    combined = stdout + stderr
-    if returncode == 0:
-        return "accepted", None
+    combined = stdout + "\n" + stderr
+    if returncode < 0:
+        return "crash", "signal"
+    if returncode == 124 or "timed out" in combined.lower():
+        return "timeout", "TimeoutExpired"
+    if returncode == 127 or "execution error:" in combined.lower():
+        return "error", "execution_error"
 
     if "Traceback" in combined or "Exception" in combined:
         crash_type = None
@@ -372,7 +379,13 @@ def classify_outcome(returncode: int, stdout: str, stderr: str) -> tuple[str, st
                 break
         return "crash", crash_type or "Exception"
 
-    if any(hint in combined for hint in REJECTED_HINTS):
+    if re.search(r"(?im)^\s*(?:usage:|error: unrecognized arguments|no such file|can't open file)", combined):
+        return "crash", "invocation_error"
+
+    if returncode == 0:
+        return "accepted", None
+
+    if any(re.search(pattern, combined, re.IGNORECASE) for pattern in REJECTION_PATTERNS):
         return "rejected", None
 
     return "crash", "unknown"
@@ -416,7 +429,7 @@ class FuzzHarness:
 
     def run(self) -> FuzzSummary:
         """Run the fuzz campaign and return a summary."""
-        total = rejected = accepted = crashes = 0
+        total = rejected = accepted = crashes = timeouts = errors = 0
         early_stop = False
         stop_reason: str | None = None
 
@@ -441,11 +454,15 @@ class FuzzHarness:
                 rejected += 1
             elif outcome == "accepted":
                 accepted += 1
-            else:
+            elif outcome == "timeout":
+                timeouts += 1
+            elif outcome == "error":
+                errors += 1
+            elif outcome == "crash":
                 crashes += 1
 
             reproducer_path: Path | None = None
-            if outcome in ("accepted", "crash"):
+            if outcome in ("accepted", "crash", "timeout", "error"):
                 reproducer_path = self._save_reproducer(iteration, outcome, crash_type, bytes(data))
 
             result = FuzzResult(
@@ -460,7 +477,7 @@ class FuzzHarness:
             )
             self.results.append(result)
 
-            if outcome in ("accepted", "crash"):
+            if outcome in ("accepted", "crash", "timeout", "error"):
                 early_stop = True
                 stop_reason = f"{outcome} ({crash_type or 'n/a'}) at iteration {iteration}"
                 break
@@ -474,6 +491,8 @@ class FuzzHarness:
             rejected=rejected,
             accepted=accepted,
             crashes=crashes,
+            timeouts=timeouts,
+            errors=errors,
             early_stop=early_stop,
             stop_reason=stop_reason,
         )
@@ -484,7 +503,7 @@ class FuzzHarness:
         if self.summary is None:
             raise RuntimeError("Run the harness before writing results")
 
-        interesting = [asdict(r) for r in self.results if r.outcome in ("accepted", "crash")]
+        interesting = [asdict(r) for r in self.results if r.outcome in ("accepted", "crash", "timeout", "error")]
         report = {
             "summary": asdict(self.summary),
             "interesting": interesting,

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 
 class Category(str, Enum):
@@ -35,19 +35,29 @@ class Backend(str, Enum):
 
 
 class FaultSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     type: Literal["reset", "write_error", "erase_error", "none"]
     point: str | None = None
     seed: int | None = None
     index: int | None = None
 
+    @field_validator("index")
+    @classmethod
+    def nonnegative_index(cls, value: int | None) -> int | None:
+        if value is not None and value < 0:
+            raise ValueError("fault index must be >= 0")
+        return value
+
 
 class ImageRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     name: str
     version: str | None = None
     trusted: bool | None = None
 
 
 class ExpectSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     invalid_image_booted: bool = False
     verify_rejected: bool = False
     outcome_in: list[str] = Field(default_factory=list)
@@ -57,6 +67,7 @@ class ExpectSpec(BaseModel):
 
 
 class Scenario(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     id: str = Field(..., pattern=r"^[A-Z][0-9]{2}[A-Z0-9]*$")
     name: str
     category: Category
@@ -71,6 +82,21 @@ class Scenario(BaseModel):
     expect: ExpectSpec = Field(default_factory=ExpectSpec)
     mvp: bool = True
     notes: str = ""
+
+    @model_validator(mode="after")
+    def validate_backend_args(self) -> "Scenario":
+        allowed = {
+            Backend.MCUBOOT_SIM: {"cargo_test", "cargo_features", "env"},
+            Backend.IMGTOOL_VERIFY: {"image", "key_path", "key_id", "key_type"},
+        }[self.backend]
+        unknown = set(self.backend_args) - allowed
+        if unknown:
+            raise ValueError(f"unsupported backend_args field(s): {', '.join(sorted(unknown))}")
+        if self.backend == Backend.MCUBOOT_SIM and self.backend_args.get("cargo_test", self.name) == "":
+            raise ValueError("mcuboot_sim backend requires a non-empty cargo_test name")
+        if self.backend == Backend.IMGTOOL_VERIFY and not self.backend_args.get("image"):
+            raise ValueError("imgtool_verify backend requires backend_args.image")
+        return self
 
     @field_validator("expect")
     @classmethod
@@ -88,9 +114,19 @@ class Scenario(BaseModel):
 
 
 class Matrix(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     name: str
     description: str
     scenarios: list[Scenario]
+
+    @field_validator("scenarios")
+    @classmethod
+    def unique_scenario_ids(cls, values: list[Scenario]) -> list[Scenario]:
+        ids = [scenario.id for scenario in values]
+        duplicates = sorted({case_id for case_id in ids if ids.count(case_id) > 1})
+        if duplicates:
+            raise ValueError(f"duplicate scenario IDs: {', '.join(duplicates)}")
+        return values
 
     @classmethod
     def from_yaml(cls, path: Path) -> "Matrix":

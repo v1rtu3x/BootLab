@@ -1,5 +1,5 @@
 id: F01O
-name: overwrite-reset-before-any-destination-write
+name: overwrite-no-cut-baseline
 category: fault
 profile: mcuboot_overwrite_reference
 primary:
@@ -19,7 +19,7 @@ backend_args:
     FAULT_INDEX: "0"
 fault:
   type: reset
-  point: before_first_flash_write
+  point: no_cut_baseline
   index: 0
 expect:
   invalid_image_booted: false
@@ -27,4 +27,5 @@ expect:
     - old_authenticated_image
     - new_authenticated_image
 notes: |
-  Overwrite-only fault comparison: reset before any destination write.
+  Overwrite-only no-cut control. FAULT_INDEX=0 disables interruption in this
+  simulator and checks completed-upgrade state.

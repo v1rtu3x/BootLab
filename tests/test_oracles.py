@@ -34,7 +34,7 @@ def test_imgtool_verify_rejected() -> None:
     result = SimulatorResult(
         returncode=1,
         stdout="",
-        stderr="",
+        stderr="Image has an invalid hash",
         backend=Backend.IMGTOOL_VERIFY,
         backend_args=scenario.backend_args,
     )
@@ -69,7 +69,7 @@ def test_cargo_test_baseline_passes() -> None:
     )
     result = SimulatorResult(
         returncode=0,
-        stdout="test result: ok. 1 passed; 0 failed;",
+        stdout="test basic_revert ... ok\ntest result: ok. 1 passed; 0 failed;",
         stderr="",
         backend=Backend.MCUBOOT_SIM,
         backend_args=scenario.backend_args,
@@ -87,7 +87,7 @@ def test_cargo_test_baseline_fails() -> None:
     )
     result = SimulatorResult(
         returncode=101,
-        stdout="test result: FAILED. 0 passed; 1 failed;",
+        stdout="test basic_revert ... FAILED\ntest result: FAILED. 0 passed; 1 failed;",
         stderr="",
         backend=Backend.MCUBOOT_SIM,
         backend_args=scenario.backend_args,
@@ -113,4 +113,42 @@ def test_infrastructure_error() -> None:
     )
     oracle = evaluate(scenario, result)
     assert oracle.passed is False
-    assert "infrastructure_error" in oracle.verdict
+    assert oracle.verdict == "ERROR"
+
+
+def test_empty_imgtool_failure_is_not_expected_rejection() -> None:
+    scenario = _scenario(
+        Category.INTEGRITY, Backend.IMGTOOL_VERIFY, {"image": "x.bin"},
+        ExpectSpec(verify_rejected=True),
+    )
+    result = SimulatorResult(1, "", "", Backend.IMGTOOL_VERIFY, scenario.backend_args)
+    oracle = evaluate(scenario, result)
+    assert not oracle.passed
+    assert oracle.verdict == "ERROR"
+
+
+def test_cargo_compile_failure_is_error_not_policy_evidence() -> None:
+    scenario = _scenario(
+        Category.VERSION, Backend.MCUBOOT_SIM, {"cargo_test": "downgrade_prevention"},
+        ExpectSpec(outcome_in=["secure_refusal"]),
+    )
+    result = SimulatorResult(
+        101, "", "error: could not compile `bootsim`", Backend.MCUBOOT_SIM,
+        scenario.backend_args,
+    )
+    oracle = evaluate(scenario, result)
+    assert not oracle.passed
+    assert oracle.verdict == "ERROR"
+
+
+def test_zero_matching_cargo_tests_are_not_executed() -> None:
+    scenario = _scenario(
+        Category.BASELINE, Backend.MCUBOOT_SIM, {"cargo_test": "basic_revert"}, ExpectSpec()
+    )
+    result = SimulatorResult(
+        0, "test result: ok. 0 passed; 0 failed; 1 filtered out;", "",
+        Backend.MCUBOOT_SIM, scenario.backend_args,
+    )
+    oracle = evaluate(scenario, result)
+    assert not oracle.passed
+    assert oracle.verdict == "NOT_EXECUTED"

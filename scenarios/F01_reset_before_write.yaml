@@ -1,5 +1,5 @@
 id: F01
-name: reset-before-any-destination-write
+name: swap-no-cut-baseline
 category: fault
 profile: mcuboot_swap_reference
 primary:
@@ -19,7 +19,7 @@ backend_args:
     FAULT_INDEX: "0"
 fault:
   type: reset
-  point: before_first_flash_write
+  point: no_cut_baseline
   index: 0
 expect:
   invalid_image_booted: false
@@ -28,6 +28,5 @@ expect:
     - new_authenticated_image
   booted_version: "1.0.0"
 notes: |
-  Simulate power-loss before any destination flash write. The original
-  authenticated v1 image must remain available; the upgrade may either stay
-  pending or complete on the next boot, but no invalid image may run.
+  FAULT_INDEX=0 disables injection in the pinned simulator. This is a
+  completed-upgrade baseline, not a reset before the first write.

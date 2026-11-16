@@ -1,7 +1,7 @@
 id: V02
 name: downgrade-prevention-disabled-allows-older-control
 category: version
-profile: mcuboot_swap_reference
+profile: mcuboot_overwrite_reference
 primary:
   name: v2.0.0-trusted
   version: 2.0.0
@@ -21,9 +21,8 @@ expect:
   invalid_image_booted: false
   outcome_in:
     - old_authenticated_image
-    - new_authenticated_image
-    - secure_refusal
 notes: |
-  Control case: with downgrade prevention disabled, the downgrade_prevention
-  upstream test reports that the policy cap is absent. This is a positive
-  control for policy configuration, not a vulnerability.
+  Equivalent overwrite-only control with downgrade prevention disabled. The
+  intended result is acceptance of the older authenticated candidate, but the
+  upstream proxy does not report the observed image/version, so this case is
+  reported as SKIP pending direct behavioral integration.

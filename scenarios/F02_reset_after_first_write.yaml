@@ -1,5 +1,5 @@
 id: F02
-name: reset-after-first-successful-write-step
+name: swap-interruption-before-first-counted-operation
 category: fault
 profile: mcuboot_swap_reference
 primary:
@@ -19,7 +19,7 @@ backend_args:
     FAULT_INDEX: "1"
 fault:
   type: reset
-  point: after_first_successful_flash_write
+  point: before_counted_operation_1
   index: 1
 expect:
   invalid_image_booted: false
@@ -28,6 +28,6 @@ expect:
     - new_authenticated_image
   booted_version: "2.0.0"
 notes: |
-  Simulate power-loss after the first successful flash write step. On resume
-  the bootloader must reach a documented recoverable state and converge to a
-  valid boot outcome (typically the new image for a permanent upgrade).
+  The simulator decrements its counter before each modeled write/erase and
+  stops when it reaches zero. Index 1 therefore interrupts before the first
+  counted operation; the evidence records whether that point was reached.

@@ -60,3 +60,18 @@ def test_matrix_round_trip(tmp_path: Path) -> None:
     assert loaded.name == "test-matrix"
     assert len(loaded.scenarios) == 1
     assert loaded.scenarios[0].id == "T01"
+
+
+def test_unknown_scenario_fields_are_rejected() -> None:
+    with pytest.raises(Exception, match="extra_forbidden|Extra inputs are not permitted"):
+        Scenario(
+            id="T01", name="test", category=Category.BASELINE, profile="p",
+            undocumented_typo=True,
+        )
+
+
+def test_matrix_rejects_duplicate_scenario_ids() -> None:
+    first = Scenario(id="T01", name="one", category=Category.BASELINE, profile="p")
+    second = Scenario(id="T01", name="two", category=Category.BASELINE, profile="p")
+    with pytest.raises(Exception, match="duplicate scenario IDs"):
+        Matrix(name="duplicates", description="test", scenarios=[first, second])
