@@ -11,6 +11,7 @@ import re
 from typing import Any
 
 from bootlab.backends.mcuboot_sim import SimulatorResult, parse_cargo_test_result
+from bootlab.backends.mcuboot_sim import normalize_image_version
 from bootlab.fuzz_image import classify_outcome
 from bootlab.scenario import Backend, Category, Scenario
 
@@ -66,21 +67,27 @@ def _evaluate_imgtool_verify(
     outcome, crash_type = classify_outcome(
         result.returncode, result.stdout, result.stderr
     )
-    if (
-        scenario.expect.outcome_in == ["validator_crash"]
-        and outcome == "crash"
-        and crash_type == "struct.error"
-    ):
-        return OracleResult(
-            True,
-            "PASS: REPRODUCED_VALIDATOR_CRASH",
-            {
-                "backend_outcome": outcome,
-                "crash_type": crash_type,
-                "expected_outcome": "validator_crash",
-                "observation_scope": "imgtool host-side verifier only",
-            },
+    if scenario.expect.outcome_in == ["validator_crash"]:
+        details = {
+            "backend_outcome": outcome,
+            "crash_type": crash_type,
+            "expected_outcome": "validator_crash",
+            "observation_scope": "imgtool host-side verifier only",
+        }
+        if outcome == "crash" and crash_type == "struct.error":
+            return OracleResult(True, "PASS: REPRODUCED_VALIDATOR_CRASH", details)
+        if outcome in {"accepted", "rejected"}:
+            details["reason"] = (
+                "expected struct.error crash was not reproduced; malformed image was accepted"
+                if outcome == "accepted"
+                else "expected struct.error crash was not reproduced; verifier returned a clean rejection"
+            )
+            return OracleResult(False, "FAIL: EXPECTED_CRASH_NOT_REPRODUCED", details)
+        verdict = "TIMEOUT" if outcome == "timeout" else "ERROR"
+        details["reason"] = (
+            "verifier did not produce the specifically expected struct.error"
         )
+        return OracleResult(False, verdict, details)
     if outcome not in {"accepted", "rejected"}:
         verdict = "TIMEOUT" if outcome == "timeout" else "ERROR"
         return OracleResult(
@@ -421,8 +428,13 @@ def _evaluate_direct_image(
         fault_index == int(requested_fault) and observed["interruption_reached"]
     )
     expected_version = scenario.expect.booted_version
-    actual_version = observation["selected_version"].split("+", 1)[0]
-    version_ok = expected_version is None or actual_version == expected_version
+    actual_version = observation["selected_version"]
+    try:
+        version_ok = expected_version is None or normalize_image_version(
+            actual_version
+        ) == normalize_image_version(expected_version)
+    except ValueError:
+        version_ok = False
     layout_ok = (
         observation["configuration"] == "nrf52840-align-8-erased-ff"
         and int(observation["selected_offset"]) == 32768

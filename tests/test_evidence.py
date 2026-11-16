@@ -139,6 +139,39 @@ def test_invalid_and_missing_verification_keys_are_recorded(tmp_path: Path) -> N
         )
 
 
+def test_evidence_input_error_downgrades_authoritative_oracle_result(
+    tmp_path: Path,
+) -> None:
+    scenario = _scenario(tmp_path / "missing-public.pem")
+    run_id = begin_run(tmp_path, "test", gather_provenance(tmp_path))
+    backend_result = SimulatorResult(
+        0,
+        "",
+        "",
+        Backend.IMGTOOL_VERIFY,
+        scenario.backend_args,
+    )
+    oracle = OracleResult(True, "pass", {"actual_verified": True})
+
+    record_path = record_evidence(
+        tmp_path,
+        scenario,
+        oracle,
+        "",
+        "",
+        0.01,
+        gather_provenance(tmp_path),
+        backend_result,
+        run_id,
+    )
+
+    record = json.loads(record_path.read_text())
+    assert record["verdict"] == "ERROR: EVIDENCE_INPUT"
+    assert record["passed"] is False
+    assert oracle.verdict == record["verdict"]
+    assert oracle.passed is record["passed"]
+
+
 def test_consecutive_runs_and_historical_report_selection(tmp_path: Path) -> None:
     image = tmp_path / "artifacts" / "corpus" / "sample.bin"
     image.parent.mkdir(parents=True)

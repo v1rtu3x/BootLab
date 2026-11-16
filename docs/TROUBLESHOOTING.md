@@ -31,7 +31,7 @@ Commands below assume the `BootLab/` directory.
 | `cargo` missing / native build failure | Rust or C build prerequisites unavailable | Check versions and compiler output; use [the toolchain guide](TOOLCHAIN.md) or [Docker](DOCKER.md) |
 | Missing vendored files | Incomplete source checkout/archive | For a Git checkout, initialize dependencies with `git submodule update --init --recursive`; otherwise obtain the complete source tree |
 | `mcuboot_commit: unknown` | Vendor Git metadata absent | Retain the source revision and local patch separately; do not invent a commit value |
-| Baseline fails because `FAULT_INDEX` is absent | Unfiltered Cargo tests include the local fault fixture | Use `FAULT_INDEX=0 bootlab baseline` for a no-cut fixture input |
+| Baseline requires BootLab image or fault inputs | `bootlab baseline` filters BootLab direct-image and fault-campaign tests, retaining the upstream test log | Run direct scenarios with `run-scenario` and interruption campaigns with `fault-sweep` |
 
 Check the installed CLI without running experiments:
 

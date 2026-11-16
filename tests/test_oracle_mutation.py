@@ -88,6 +88,46 @@ def test_truncated_image_expected_struct_error_is_recorded_as_crash() -> None:
     assert oracle.details["observation_scope"] == "imgtool host-side verifier only"
 
 
+def test_truncated_image_expected_crash_fails_if_malformed_image_is_accepted() -> None:
+    scenario = _scenario(
+        Category.VALIDATION,
+        Backend.IMGTOOL_VERIFY,
+        {"image": "truncated.bin"},
+        ExpectSpec(outcome_in=["validator_crash"]),
+    )
+    result = SimulatorResult(
+        returncode=0,
+        stdout="Image verified successfully",
+        stderr="",
+        backend=Backend.IMGTOOL_VERIFY,
+        backend_args=scenario.backend_args,
+    )
+    oracle = evaluate(scenario, result)
+    assert oracle.passed is False
+    assert oracle.verdict == "FAIL: EXPECTED_CRASH_NOT_REPRODUCED"
+    assert "malformed image was accepted" in oracle.details["reason"]
+
+
+def test_truncated_image_expected_crash_reports_clean_rejection_separately() -> None:
+    scenario = _scenario(
+        Category.VALIDATION,
+        Backend.IMGTOOL_VERIFY,
+        {"image": "truncated.bin"},
+        ExpectSpec(outcome_in=["validator_crash"]),
+    )
+    result = SimulatorResult(
+        returncode=1,
+        stdout="",
+        stderr="Image has an invalid hash",
+        backend=Backend.IMGTOOL_VERIFY,
+        backend_args=scenario.backend_args,
+    )
+    oracle = evaluate(scenario, result)
+    assert oracle.passed is False
+    assert oracle.verdict == "FAIL: EXPECTED_CRASH_NOT_REPRODUCED"
+    assert "clean rejection" in oracle.details["reason"]
+
+
 def test_baseline_cargo_test_fails() -> None:
     """A positive baseline scenario must fail when the cargo test does not pass."""
     scenario = _scenario(

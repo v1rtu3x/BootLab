@@ -90,7 +90,7 @@ The CLI prints a verdict and a run-scoped evidence record path. Inspect its logs
 |---|---|
 | Follow the guided tutorial | `bootlab tutorial` |
 | Run the tutorial without prompts | `bootlab tutorial --non-interactive` |
-| Capture the upstream baseline log with a no-cut fault index | `FAULT_INDEX=0 bootlab baseline` |
+| Capture the filtered upstream baseline log | `bootlab baseline` |
 | Compare downgrade policy configurations | `bootlab compare-profiles mcuboot_policy_downgrade_enabled mcuboot_overwrite_reference` |
 | Run setup, matrix, comparison, and a small fault sweep | `./scripts/reproduce.sh` |
 | Sign, verify, and export the latest run | `bootlab sign-evidence && bootlab verify-evidence && bootlab export-evidence` |

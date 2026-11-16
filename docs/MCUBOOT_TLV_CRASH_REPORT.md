@@ -26,6 +26,7 @@ is a separate outcome.
 
 ```bash
 bootlab build-corpus
+imgtool getpub -k vendor/mcuboot/root-ec-p256.pem -e pem -o /tmp/dev-trusted-public.pem
 python3 - artifacts/corpus/v2.0.0-trusted.signed.bin /tmp/tlv-length-bad.bin <<'PY'
 import struct
 import sys
@@ -44,8 +45,12 @@ if magic != 0x6907:
 struct.pack_into("<H", data, tlv + 2, 0xffff)
 open(destination, "wb").write(data)
 PY
-imgtool verify -k fixtures/keys/dev-trusted-ecdsa-p256.pem /tmp/tlv-length-bad.bin
+imgtool verify -k /tmp/dev-trusted-public.pem /tmp/tlv-length-bad.bin
 ```
+
+`dev-trusted` uses MCUboot's pinned simulator root key. `imgtool getpub`
+derives a temporary public-only PEM for verification; a generated local private
+key under `fixtures/keys/` is not required.
 
 The command's result must be classified from the actual output. A traceback is
 a host-tool crash, not a secure refusal. Do not describe this as a confirmed

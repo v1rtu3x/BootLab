@@ -53,10 +53,12 @@ These are profile declarations, not hardware measurements. Direct scenarios vali
 
 `bootlab run-matrix` writes per-case evidence and the matrix report. It does **not** create `evidence/baseline_log.txt`.
 
-The separate `bootlab baseline` command runs unfiltered `cargo test` and captures that log. The local fault test requires `FAULT_INDEX`, so an example invocation is:
+The separate `bootlab baseline` command captures the upstream Cargo tests while filtering BootLab-only direct-image and fault-campaign tests. Those tests require scenario image inputs or an explicit `FAULT_INDEX`; run them through `run-scenario` and `fault-sweep` instead. An example baseline invocation is:
 
 ```bash
-FAULT_INDEX=0 bootlab baseline
+bootlab baseline
 ```
 
 This uses Cargo's default features and is distinct from the signature-feature matrix. Record its actual exit status and test count; do not reuse a historical “25 passed” banner as evidence for a new checkout.
+
+Direct scenario versions use `major.minor.revision[+build]`; omitting `+build` means build zero. BootLab compares the full four-field identity when checking declared and observed image versions. MCUboot's downgrade comparison follows the pinned build configuration: `iv_build_num` is ignored unless `MCUBOOT_VERSION_CMP_USE_BUILD_NUMBER` is enabled.

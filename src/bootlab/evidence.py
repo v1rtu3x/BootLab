@@ -368,6 +368,11 @@ def record_evidence(
     record_verdict = oracle_result.verdict
     if input_errors and oracle_result.passed:
         record_verdict = "ERROR: EVIDENCE_INPUT"
+    # Evidence capture is part of the scenario result. Keep every caller's
+    # console, counters, reports, and exit decision aligned with the record.
+    oracle_result.passed = record_passed
+    oracle_result.verdict = record_verdict
+    oracle_result.details = record_details
     if backend_result.infrastructure_error:
         backend_outcome = (
             "timeout" if backend_result.timed_out else "infrastructure_error"

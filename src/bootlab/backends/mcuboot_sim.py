@@ -154,7 +154,9 @@ class McubootSimAdapter:
                         raise ValueError(
                             f"{label} image uses {image_algorithm}, expected {key_type}"
                         )
-                    if _image_version(image) != image_ref.version:
+                    if normalize_image_version(
+                        _image_version(image)
+                    ) != normalize_image_version(image_ref.version):
                         raise ValueError(
                             f"{label} image version conflicts with its declared version"
                         )
@@ -173,6 +175,16 @@ class McubootSimAdapter:
                     "primary": primary.stat().st_size,
                     "candidate": candidate.stat().st_size,
                 }
+            except subprocess.TimeoutExpired as exc:
+                return SimulatorResult(
+                    returncode=-1,
+                    stdout=_output_text(exc.stdout),
+                    stderr=_output_text(exc.stderr) or str(exc),
+                    backend=Backend.MCUBOOT_SIM,
+                    backend_args=runtime_args,
+                    infrastructure_error=True,
+                    timed_out=True,
+                )
             except (
                 KeyError,
                 OSError,
@@ -409,8 +421,34 @@ def _image_signature_algorithm(image: bytes) -> str:
 
 
 def _image_version(image: bytes) -> str:
-    major, minor, revision = struct.unpack_from("<BBB", image, 20)
-    return f"{major}.{minor}.{revision}"
+    if len(image) < 28:
+        raise ValueError("image is too short to contain the complete version structure")
+    major, minor, revision, build = struct.unpack_from("<BBHI", image, 20)
+    return f"{major}.{minor}.{revision}+{build}"
+
+
+def normalize_image_version(value: str | None) -> tuple[int, int, int, int]:
+    """Parse the full MCUboot version; omitted build numbers mean build zero.
+
+    Build participates in BootLab's exact declared-versus-observed version
+    identity. MCUboot's downgrade comparator separately follows its build
+    number compile-time configuration.
+    """
+    if not isinstance(value, str):
+        raise ValueError("image version must be a string")
+    version_part, separator, build_part = value.partition("+")
+    components = version_part.split(".")
+    if len(components) != 3 or any(not component.isdigit() for component in components):
+        raise ValueError(
+            f"invalid MCUboot version {value!r}; expected major.minor.revision[+build]"
+        )
+    major, minor, revision = (int(component) for component in components)
+    if separator and not build_part.isdigit():
+        raise ValueError(f"invalid MCUboot build number in version {value!r}")
+    build = int(build_part) if separator else 0
+    if major > 255 or minor > 255 or revision > 65535 or build > 0xFFFFFFFF:
+        raise ValueError(f"MCUboot version {value!r} exceeds its field width")
+    return major, minor, revision, build
 
 
 def _output_text(value: str | bytes | None) -> str:

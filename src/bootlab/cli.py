@@ -308,7 +308,17 @@ def baseline(ctx: click.Context, output: Path) -> None:
     click.echo(f"Running upstream simulator tests in {mcuboot_sim} ...")
     with output.open("w") as fh:
         result = subprocess.run(
-            ["cargo", "test"],
+            [
+                "cargo",
+                "test",
+                "--",
+                "--skip",
+                "bootlab_direct_image",
+                "--skip",
+                "fault_campaign_probe",
+                "--skip",
+                "fault_campaign_upgrade",
+            ],
             cwd=mcuboot_sim,
             stdout=fh,
             stderr=subprocess.STDOUT,
@@ -908,6 +918,7 @@ def tutorial(ctx: click.Context, non_interactive: bool) -> None:
         )
     )
 
+    tutorial_failed = False
     for index, step in enumerate(steps, start=1):
         console.print()
         console.print(
@@ -956,6 +967,7 @@ def tutorial(ctx: click.Context, non_interactive: bool) -> None:
             oracle, record_path = _run_tutorial_scenario(
                 ws, scenario_file, tutorial_run_id
             )
+        tutorial_failed = tutorial_failed or not oracle.passed
 
         verdict_style = "green" if oracle.passed else "red"
         verdict_text = "PASS" if oracle.passed else "FAIL"
@@ -978,6 +990,11 @@ def tutorial(ctx: click.Context, non_interactive: bool) -> None:
             border_style="green",
         )
     )
+    if tutorial_failed:
+        console.print(
+            "Tutorial scenarios included one or more failed evidence records."
+        )
+        sys.exit(1)
 
 
 @main.command()

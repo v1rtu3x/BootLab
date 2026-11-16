@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import shutil
 
 from click.testing import CliRunner
@@ -6,6 +7,7 @@ from click.testing import CliRunner
 from bootlab.backends.mcuboot_sim import SimulatorResult
 from bootlab import cli as cli_module
 from bootlab.cli import main
+from bootlab.oracles import OracleResult
 from bootlab.scenario import Backend
 
 
@@ -203,6 +205,190 @@ def test_allow_skip_rejects_unknown_or_unregistered_ids() -> None:
     )
     assert result.exit_code != 0
     assert "not approved for skips" in result.output
+
+
+def test_evidence_capture_failure_controls_single_matrix_and_comparison_results(
+    tmp_path: Path, monkeypatch
+) -> None:
+    scenarios_dir = _copy_scenarios(tmp_path, "S01_payload_flip.yaml")
+
+    def accepted_rejection(scenario):
+        return SimulatorResult(
+            1,
+            "",
+            "Image has an invalid hash",
+            scenario.backend,
+            scenario.backend_args,
+        )
+
+    _fake_run(tmp_path, monkeypatch, accepted_rejection)
+    runner = CliRunner()
+    scenario_file = scenarios_dir / "S01_payload_flip.yaml"
+
+    single = runner.invoke(
+        main,
+        ["--workspace", str(tmp_path), "run-scenario", str(scenario_file)],
+    )
+    assert single.exit_code == 1
+    assert "ERROR: EVIDENCE_INPUT" in single.output
+    single_record = json.loads(
+        next((tmp_path / "evidence" / "runs").glob("*/S01/record.json")).read_text()
+    )
+    assert single_record["passed"] is False
+
+    matrix = runner.invoke(
+        main,
+        ["--workspace", str(tmp_path), "run-matrix", "--scenarios-dir", "scenarios"],
+    )
+    assert matrix.exit_code == 1
+    assert "Passed: 0  Failed: 1" in matrix.output
+
+    comparison_workspace = tmp_path / "comparison"
+    comparison_dir = comparison_workspace / "scenarios"
+    comparison_dir.mkdir(parents=True)
+    source_yaml = scenario_file.read_text()
+    (comparison_dir / "A01.yaml").write_text(
+        source_yaml.replace("id: S01", "id: A01").replace(
+            "profile: mcuboot_swap_reference", "profile: profile_a"
+        )
+    )
+    (comparison_dir / "B01.yaml").write_text(
+        source_yaml.replace("id: S01", "id: B01").replace(
+            "profile: mcuboot_swap_reference", "profile: profile_b"
+        )
+    )
+    comparison = runner.invoke(
+        main,
+        [
+            "--workspace",
+            str(comparison_workspace),
+            "compare-profiles",
+            "profile_a",
+            "profile_b",
+            "--scenarios-dir",
+            "scenarios",
+        ],
+    )
+    assert comparison.exit_code == 1
+    assert "0 passed, 2 failed/unapproved, 0 skipped" in comparison.output
+    comparison_report = next(
+        (comparison_workspace / "evidence" / "runs").glob("*/comparison.md")
+    )
+    assert "ERROR: EVIDENCE_INPUT" in comparison_report.read_text()
+
+
+def test_tutorial_exits_unsuccessfully_when_recorded_evidence_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _copy_scenarios(
+        tmp_path,
+        "D01_direct_authenticated_upgrade.yaml",
+        "D02_direct_payload_tamper.yaml",
+        "D03_direct_untrusted_signer.yaml",
+        "D06_direct_interruption_recovery.yaml",
+        "A01_rsa_boot_v1.yaml",
+    )
+
+    def result_with_evidence_error(workspace, scenario_file, run_id):
+        scenario = cli_module._load_scenario(scenario_file)
+        oracle = OracleResult(True, "PASS: BACKEND", {})
+        backend_result = SimulatorResult(
+            0,
+            "test result: ok. 1 passed; 0 failed;",
+            "",
+            scenario.backend,
+            scenario.backend_args,
+        )
+        record_path = cli_module.record_evidence(
+            workspace,
+            scenario,
+            oracle,
+            backend_result.stdout,
+            backend_result.stderr,
+            0.01,
+            {},
+            backend_result,
+            run_id,
+        )
+        return oracle, record_path
+
+    monkeypatch.setattr(
+        cli_module, "_run_tutorial_scenario", result_with_evidence_error
+    )
+    result = CliRunner().invoke(
+        main, ["--workspace", str(tmp_path), "tutorial", "--non-interactive"]
+    )
+    assert result.exit_code == 1
+    assert "ERROR: EVIDENCE_INPUT" in result.output
+    assert (
+        "Tutorial scenarios included one or more failed evidence records"
+        in result.output
+    )
+
+
+def test_baseline_skips_bootlab_tests_that_require_scenario_inputs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    observed = {}
+
+    class Process:
+        returncode = 0
+
+    def fake_run(command, **kwargs):
+        observed["command"] = command
+        kwargs["stdout"].write("upstream-only baseline")
+        return Process()
+
+    monkeypatch.setattr(cli_module.subprocess, "run", fake_run)
+    result = CliRunner().invoke(main, ["--workspace", str(tmp_path), "baseline"])
+    assert result.exit_code == 0, result.output
+    command = observed["command"]
+    assert command[:2] == ["cargo", "test"]
+    assert command[2:] == [
+        "--",
+        "--skip",
+        "bootlab_direct_image",
+        "--skip",
+        "fault_campaign_probe",
+        "--skip",
+        "fault_campaign_upgrade",
+    ]
+
+
+def test_direct_preverification_timeout_is_recorded_as_timeout(
+    tmp_path: Path, monkeypatch
+) -> None:
+    scenarios_dir = _copy_scenarios(tmp_path, "D01_direct_authenticated_upgrade.yaml")
+
+    def timeout(scenario):
+        return SimulatorResult(
+            -1,
+            "partial verifier output",
+            "verification timed out",
+            scenario.backend,
+            scenario.backend_args,
+            infrastructure_error=True,
+            timed_out=True,
+        )
+
+    _fake_run(tmp_path, monkeypatch, timeout)
+    result = CliRunner().invoke(
+        main,
+        [
+            "--workspace",
+            str(tmp_path),
+            "run-scenario",
+            str(scenarios_dir / "D01_direct_authenticated_upgrade.yaml"),
+        ],
+    )
+    assert result.exit_code == 1
+    assert "TIMEOUT" in result.output
+    record = json.loads(
+        next((tmp_path / "evidence" / "runs").glob("*/D01/record.json")).read_text()
+    )
+    assert record["verdict"] == "TIMEOUT"
+    assert record["backend_outcome"] == "timeout"
+    assert record["infrastructure_error"] is True
 
 
 def test_validate_scenarios_rejects_empty_inventory(tmp_path: Path) -> None:
