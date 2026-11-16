@@ -48,6 +48,9 @@ COPY . /opt/bootlab/
 RUN test -f vendor/mcuboot/sim/Cargo.toml || \
     (echo "ERROR: vendor/mcuboot is missing. Clone with --recurse-submodules or run 'git submodule update --init --recursive'." && exit 1)
 
+# Patch the pinned simulator tree idempotently before installing or running it.
+RUN ./scripts/apply-mcuboot-patches.sh
+
 # Create a Python virtual environment and install the lab plus MCUboot imgtool.
 RUN python3 -m venv .venv && \
     . .venv/bin/activate && \
@@ -59,11 +62,9 @@ RUN python3 -m venv .venv && \
 ENV VIRTUAL_ENV=/opt/bootlab/.venv \
     PATH=/opt/bootlab/.venv/bin:$PATH
 
-# Warm caches by pre-building the signed image corpus and running the full
-# assurance matrix.  This makes repeated container invocations fast and proves
-# the image works before it is tagged.
+# Build fixtures and perform a bounded CLI smoke check during image creation.
 RUN bootlab build-corpus
-RUN bootlab run-matrix
+RUN bootlab validate-scenarios && bootlab run-scenario scenarios/P01_boot_v1.yaml
 
 # Make the CLI the default entrypoint; users can still override with `bash`.
 ENTRYPOINT ["bootlab"]

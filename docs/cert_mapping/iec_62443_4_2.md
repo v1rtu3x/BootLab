@@ -38,7 +38,7 @@ Use a product-owned requirement ID and the exact clause reference selected for t
 | Threat / rationale | `<threat ID and reason this check is relevant>` |
 | Effective configuration | `<MCUboot revision, local patch, Cargo features or board setup>` |
 | Executed case | `<scenario ID, backend, actual test/input>` |
-| Retained evidence | `<run archive>/evidence/<id>/record.json`, stdout, stderr, input hashes |
+| Retained evidence | `<run archive>/evidence/runs/<run-id>/<id>/record.json`, stdout, stderr, input hashes |
 | Observation and limit | `<what happened; what the experiment did not observe>` |
 | Review | `<owner, date, conclusion, unresolved work>` |
 

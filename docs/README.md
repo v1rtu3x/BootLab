@@ -38,7 +38,7 @@ flowchart LR
 
 | Read | What it helps you do |
 |---|---|
-| [Test matrix](TEST_MATRIX.md) | Inspect all 33 scenario definitions and backend expectations |
+| [Test matrix](TEST_MATRIX.md) | Inspect scenario definitions, backend executions, and coverage limits |
 | [Findings policy](FINDINGS_POLICY.md) | Separate security violations, parser failures, and harness errors |
 | [Fault injection](FAULT_INJECTION.md) | Run the deterministic fault helper and interpret its counter |
 | [Contributing](../CONTRIBUTING.md) | Add a case, command, or visual explanation |
@@ -50,4 +50,4 @@ flowchart LR
 
 The [IEC 62443-4-2](cert_mapping/iec_62443_4_2.md), [ISO/SAE 21434](cert_mapping/iso_sae_21434.md), and [EU CRA](cert_mapping/eu_cra.md) templates organize engineering evidence. They deliberately leave exact regulatory or standards clauses to the product's assessment work.
 
-**Reading rule:** diagrams explain the model; `evidence/<case_id>/record.json` and its logs describe an actual run. A documented expectation is not a stored result.
+**Reading rule:** diagrams explain the model; `evidence/runs/<run-id>/<case_id>/record.json` and its logs describe an actual run. A documented expectation is not a stored result.

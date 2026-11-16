@@ -20,8 +20,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
+          pip install ./vendor/mcuboot/scripts
+      - name: Apply simulator patch and generate fixtures
+        run: |
+          ./scripts/apply-mcuboot-patches.sh
+          bootlab build-corpus
+          bootlab validate-scenarios
+      - name: Check formatting and lint
+        run: ruff check src tests
       - name: Run unit tests
-        run: pytest
+        run: pytest -q
 
   corpus-and-matrix:
     runs-on: ubuntu-latest
@@ -41,24 +49,34 @@ jobs:
           pip install ./vendor/mcuboot/scripts
       - name: Apply MCUboot simulator patches
         run: ./scripts/apply-mcuboot-patches.sh
+      - name: Validate scenarios
+        run: bootlab validate-scenarios
       - name: Build image corpus
         run: bootlab build-corpus
       - name: Run assurance matrix
-        run: bootlab run-matrix
+        run: bootlab run-matrix --allow-skip P01O --allow-skip P02O --allow-skip V02
       - name: Cross-profile comparison
-        run: bootlab compare-profiles mcuboot_swap_reference mcuboot_overwrite_reference
+        run: bootlab compare-profiles mcuboot_swap_reference mcuboot_overwrite_reference --allow-skip P01O --allow-skip P02O --allow-skip V02
       - name: Deterministic fault sweep
         run: bootlab fault-sweep --start 0 --end 10 --features sig-ecdsa
       - name: Sanitized report
         run: bootlab sanitize-report
       - name: Upload evidence
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          if-no-files-found: ignore
+          if-no-files-found: warn
+          retention-days: 14
           name: assurance-evidence
           path: |
-            evidence/report.md
-            evidence/comparison.md
-            evidence/report_sanitized.md
-            evidence/fault_table.csv
-            evidence/fault_table.json
+            evidence/
+            artifacts/corpus/manifest.json
+
+  docker-clean-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build Docker image and run the Dockerfile smoke workflow
+        run: docker build --tag bootlab:ci .

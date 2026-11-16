@@ -1,45 +1,55 @@
-# MCUboot `imgtool verify` TLV length crash
+# Malformed TLV verifier finding: reproduction status
 
-## Summary
+## Status
 
-While building the BootLab fault corpus we discovered that MCUboot's `imgtool verify` command crashes with an unhandled `struct.error` when it encounters a firmware image whose TLV area contains a malformed `TLV_INFO_MAGIC` / `TLV_PROT_INFO_MAGIC` header or a TLV entry with an invalid length.
+The previous version of this note claimed a `struct.error` crash and linked to
+an external report directory that is not part of this repository. That crash
+claim has **not been reproduced or verified in this checkout**, and no upstream
+fix/report status is asserted here.
 
-The crash is reproducible with a single byte change to the TLV length field of an otherwise valid signed image. Because the exception is not caught by the CLI, a malicious or corrupted image can terminate the verification tool rather than being rejected cleanly.
+The repository pins MCUboot submodule revision
+`229068b6d34688ddc7286c6d2056527b72f03cf4`. The local environment used for
+this documentation change did not have `imgtool` installed and could not
+resolve package-index DNS, so there is no observed failure result to report.
 
-## Reproducer
+## Minimal experiment
 
-A standalone reproducer, proposed patch, and visual explanation live in the external report folder:
+After the clean-checkout setup in [REPRODUCIBILITY.md](REPRODUCIBILITY.md),
+generate a signed image, corrupt its TLV total length, and inspect the verifier
+outcome. Save stdout, stderr, exit status, and the mutated image hash. A nonzero
+exit is not enough to call this a clean rejection: a traceback or process crash
+is a separate outcome.
 
-```text
-../mcuboot-imgtool-tlv-crash-report/
+```bash
+bootlab build-corpus
+python3 - artifacts/corpus/v2.0.0-trusted.signed.bin /tmp/tlv-length-bad.bin <<'PY'
+import struct
+import sys
+
+source, destination = sys.argv[1:]
+data = bytearray(open(source, "rb").read())
+header_size = struct.unpack_from("<H", data, 8)[0]
+image_size = struct.unpack_from("<I", data, 12)[0]
+tlv = header_size + image_size
+magic, total = struct.unpack_from("<HH", data, tlv)
+if magic == 0x6908:  # protected TLV block; advance to ordinary TLVs
+    tlv += total
+    magic, total = struct.unpack_from("<HH", data, tlv)
+if magic != 0x6907:
+    raise SystemExit(f"unexpected TLV info magic: 0x{magic:04x}")
+struct.pack_into("<H", data, tlv + 2, 0xffff)
+open(destination, "wb").write(data)
+PY
+imgtool verify -k fixtures/keys/dev-trusted-ecdsa-p256.pem /tmp/tlv-length-bad.bin
 ```
 
-Files included:
+The command's result must be classified from the actual output. If it raises an
+uncaught exception, preserve the reproducer and report it against the pinned
+revision using the project's findings process. Do not describe it as a
+confirmed upstream vulnerability or compliance failure without that evidence.
 
-- `reproducer.py` — generates a valid image, mutates the TLV length, and triggers `struct.error`
-- `crash_repro.bin` — ready-to-use mutated image
-- `proposed_fix.patch` — catch `struct.error` in `imgtool/image.py` and return a clean error
-- `assets/tlv-crash-diagram.png` — static diagram of the malformed TLV layout
-- `assets/tlv-crash-animation-*.gif` — animated walkthrough of the crash
+## Scope
 
-## Impact
-
-- **Availability:** an untrusted image can crash the verification tooling.
-- **Security posture:** a verification failure must be a controlled rejection, not an unhandled exception.
-- **Compliance:** clean error handling is expected by IEC 62443-4-2, ISO/SAE 21434, and the EU Cyber Resilience Act.
-
-## Proposed fix
-
-Wrap the TLV parsing loop in `imgtool/image.py` with a `try/except struct.error` block and emit a human-readable error such as:
-
-```text
-Error: image contains malformed TLV entry
-```
-
-See `../mcuboot-imgtool-tlv-crash-report/proposed_fix.patch` for the exact diff.
-
-## References
-
-- MCUboot: https://github.com/mcu-tools/mcuboot
-- `imgtool/image.py`: https://github.com/mcu-tools/mcuboot/blob/main/scripts/imgtool/image.py
-- BootLab test that exercises malformed TLVs: `scenarios/S04_truncated_tlv.yaml`
+The existing `S04_truncated_tlv.yaml` uses a truncated file fixture. It is not
+this malformed-length experiment and does not establish parser-crash behavior.
+BootLab reports host-tool behavior only; it does not claim device execution.

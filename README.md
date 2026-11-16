@@ -60,10 +60,14 @@ The corpus is **not injected into simulator flash** by the current adapter. Expe
 Run these commands from the **BootLab directory**. You need Python 3.10+, a Rust/C build toolchain, and a populated `vendor/mcuboot/` tree including its dependencies. The first Cargo build can take several minutes. [Detailed setup](docs/REPRODUCIBILITY.md) · [Docker](docs/DOCKER.md)
 
 ```bash
+git submodule update --init --recursive
+./scripts/apply-mcuboot-patches.sh
+
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ".[dev]"
 python -m pip install ./vendor/mcuboot/scripts
+bootlab validate-scenarios
 
 # Create development keys and signed / mutated image fixtures.
 bootlab build-corpus
@@ -71,18 +75,32 @@ bootlab build-corpus
 # Start with a single upstream simulator proxy.
 bootlab run-scenario scenarios/P01_boot_v1.yaml
 
-# Evaluate all 33 scenario definitions and write the report.
-bootlab run-matrix
+# Evaluate all scenario definitions and write the report.
+bootlab run-matrix --allow-skip P01O --allow-skip P02O --allow-skip V02
+
+# Compare a valid corpus image with an intentionally modified image.
+bootlab run-scenario scenarios/S01_payload_flip.yaml
+bootlab run-scenario scenarios/P01_boot_v1.yaml
 ```
 
-Read `evidence/report.md` and the per-case logs after the run. A `PASS` means the current oracle accepted a backend result; read the [matrix notes](docs/TEST_MATRIX.md) before treating it as a security guarantee.
+The CLI prints a verdict and a unique evidence record path. Inspect that
+record's `stdout_path`, `stderr_path`, selected test identity, and assertion
+details. `imgtool_verify` cases exercise generated corpus images directly;
+`mcuboot_sim` cases run named upstream tests with simulator-built fixtures.
+`P01O`, `P02O`, and `V02` are documented upstream early-return/unsupported
+proxies. They appear as `SKIP`; the command exits successfully only when the
+caller explicitly allows those IDs. `V01` is an upstream simulator proxy whose internal image assertions support
+refusal under the enabled feature; `V02` remains `SKIP` because the pinned
+feature-disabled helper returns early. Neither injects the declared BootLab
+images directly. A `PASS` is limited to assertions the backend actually executed; it
+is not a general bootloader guarantee. See [matrix notes](docs/TEST_MATRIX.md).
 
 | Next step | Command |
 |---|---|
 | Follow the guided tutorial | `bootlab tutorial` |
 | Run the tutorial without prompts | `bootlab tutorial --non-interactive` |
 | Capture the upstream baseline log with a no-cut fault index | `FAULT_INDEX=0 bootlab baseline` |
-| Compare the reference profiles | `bootlab compare-profiles mcuboot_swap_reference mcuboot_overwrite_reference` |
+| Compare the reference profiles | `bootlab compare-profiles mcuboot_swap_reference mcuboot_overwrite_reference --allow-skip P01O --allow-skip P02O --allow-skip V02` |
 | Run setup, matrix, comparison, and a small fault sweep | `./scripts/reproduce.sh` |
 
 Development keys in `fixtures/keys/` are generated locally. Keep the corpus manifest and run provenance if you need to compare results; fresh keys, signatures, timestamps, and toolchain differences mean a new run need not produce identical bytes.

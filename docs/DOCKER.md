@@ -2,7 +2,7 @@
 
 [Project overview](../README.md) · [Visual walkthrough](../WALKTHROUGH.md) · [Documentation map](README.md)
 
-**The container packages the host lab and warms simulator caches during its build.** It runs `bootlab build-corpus` and `bootlab run-matrix` before producing the image, so build-time test failures stop the build.
+**The container installs the host lab, applies the local simulator patch, builds fixtures, and runs one bounded simulator smoke case.** Run the full matrix explicitly and inspect its verdict counts.
 
 ## 01 / Build from the project directory
 
@@ -21,7 +21,8 @@ The image entrypoint is **`bootlab`**. Arguments after the image name are BootLa
 
 | Task | Command |
 |---|---|
-| Run all 33 defined cases | `docker run --rm bootlab:latest run-matrix` |
+| Validate scenario definitions | `docker run --rm bootlab:latest validate-scenarios` |
+| Run the scenario matrix, allowing documented skips | `docker run --rm bootlab:latest run-matrix --allow-skip P01O --allow-skip P02O --allow-skip V02` |
 | Run one case | `docker run --rm bootlab:latest run-scenario scenarios/P01_boot_v1.yaml` |
 | Build the corpus | `docker run --rm bootlab:latest build-corpus` |
 | Run Python tests | `docker run --rm --entrypoint pytest bootlab:latest -v` |
@@ -43,16 +44,16 @@ flowchart LR
 mkdir -p evidence
 docker run --rm \
   -v "$(pwd)/evidence:/opt/bootlab/evidence" \
-  bootlab:latest run-matrix
+  bootlab:latest run-matrix --allow-skip P01O --allow-skip P02O --allow-skip V02
 ```
 
 Without a mount, results from a `--rm` container disappear when it exits. The image also contains its build-time corpus and evidence; keep the container image or export relevant inputs when archiving a run. The image runs as root by default, so bind-mounted output may be owned by root on Linux.
 
 ## 04 / VS Code devcontainer
 
-Open `BootLab/` in VS Code and choose **Dev Containers: Reopen in Container**. The configuration builds the same Dockerfile, selects the container virtual environment, installs Python/Rust/YAML editor extensions, and runs `bootlab run-matrix` as its post-create command.
+Open `BootLab/` in VS Code and choose **Dev Containers: Reopen in Container**. The configuration builds the same Dockerfile, edits `/opt/bootlab`, selects the container virtual environment, installs Python/Rust/YAML editor extensions, and applies the patch, builds fixtures, and validates scenarios after creation.
 
-Confirm the working directory and package source when editing: the Docker image installs the package editable at `/opt/bootlab`, while a development workspace may be mounted at a separate path. Run commands from the intended workspace and reinstall with `python -m pip install -e ".[dev]"` there if needed.
+The devcontainer workspace and editable package source are both `/opt/bootlab`.
 
 ## 05 / Diagnose failures
 

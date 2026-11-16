@@ -51,7 +51,7 @@ For a simulator scenario, step 4 runs:
 cargo test --features <cargo_features> -- <cargo_test_filter>
 ```
 
-Cargo receives a substring filter, not `--exact`. A filter such as `norevert` may select more than one test. The adapter adds `RUST_LOG=warn` and the scenario's explicit environment variables, including `FAULT_INDEX` for fault cases.
+Cargo receives the selected test name followed by `--exact --nocapture`; the adapter verifies Cargo reports exactly one executed test. It adds `RUST_LOG=warn` and the scenario's explicit environment variables, including `FAULT_INDEX` for fault cases.
 
 ## 03 / Know which fields drive execution
 
@@ -92,7 +92,7 @@ The record connects the case and the oracle decision. The logs let you inspect t
 
 `run-matrix` adds an aggregate report. `run-scenario` writes one case's record and logs without regenerating the matrix report. Running the same ID again replaces its case directory contents. Archive a complete run before further experiments if the previous result needs to remain reviewable.
 
-The corpus manifest contains input hashes separately. Record signatures cover canonical JSON, excluding the signature metadata itself; they do not authenticate the bytes of the files named by the log paths. See [retention guidance](REPRODUCIBILITY.md#04--retain-a-reviewable-run).
+Evidence records bind scenario configuration, logs, available image hashes, source revisions, dirty state, and the local patch hash. Ed25519 signatures cover the canonical record; verification uses an explicitly supplied public key and checks referenced log/input hashes. A valid signature establishes integrity of the evidence package, not correctness of the experiment.
 
 ## 05 / Where the other commands fit
 

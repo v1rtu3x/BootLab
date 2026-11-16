@@ -37,7 +37,7 @@ flowchart LR
 
 ## 03 / Interpret a pass carefully
 
-The current matrix accepts any nonzero `imgtool verify` exit for a rejection case. Review stderr for crashes. The structured `fuzz-image` command makes a separate accepted/rejected/crash classification and retains reproducer bytes for investigation.
+The oracle accepts only recognized validation-error output as a clean `imgtool verify` rejection. Tracebacks, invocation errors, timeouts, missing tools, and ambiguous nonzero exits are errors. `fuzz-image` uses the same rejection patterns and records accepted, rejected, crash, timeout, and execution-error outcomes.
 
 V01's wrapper expectation is permissive, although its selected upstream helper checks refusal; K01–K03 do not modify a device trust store; a fault-case pass does not by itself prove that its requested index was reached. These are [coverage limits](LIMITATIONS.md), not findings established by the documentation.
 

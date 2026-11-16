@@ -79,7 +79,7 @@ bootlab run-scenario scenarios/P02_upgrade_v2.yaml
 bootlab run-matrix
 ```
 
-A scenario writes `evidence/<id>/record.json`, `stdout.txt`, and `stderr.txt`. Re-running that ID replaces those files. The matrix report reflects the checks that ran; the scenario count alone is not a count of independent security properties.
+A scenario writes `evidence/runs/<run-id>/<id>/record.json` and separate stdout/stderr files. Run IDs keep independent experiments. The matrix report reflects the checks that ran; the scenario count alone is not a count of independent security properties.
 
 <a id="baseline"></a>
 <a id="baseline-cases"></a>
@@ -284,7 +284,7 @@ A signature binds the image's authenticated content to a signing key. These case
 
 **Question:** does a post-signing payload edit fail verification? A damaged download or unauthorized patch should not retain its original signature's validity.
 
-**Current check:** the image factory flips one bit at `header_size + 64` and writes `v2.0.0-trusted-payload-flip.bin`. Verification uses `dev-trusted`. The oracle passes when `imgtool` exits nonzero (`verify_rejected: true`). This observes offline rejection, not a device boot.
+**Current check:** the image factory flips one bit at `header_size + 64` and writes `v2.0.0-trusted-payload-flip.bin`. Verification uses `dev-trusted`. The oracle passes only when the verifier emits a recognized image-validation error; crashes and ambiguous failures are errors. This observes offline rejection, not a device boot.
 
 ```bash
 bootlab run-scenario scenarios/S01_payload_flip.yaml
@@ -370,7 +370,7 @@ An image must have a usable structure and fit the destination. These checks expl
 
 **Question:** does the verifier refuse an incomplete signed image?
 
-**Current check:** the factory keeps the first half of the signed file as `v2.0.0-trusted-truncated.bin`. The scenario filename refers to TLV metadata, but this is a coarse file truncation, not a precise mutation of a chosen tag-length-value field. The oracle expects a nonzero verifier exit. Check stderr when assessing parser behavior; the oracle does not classify the rejection reason.
+**Current check:** the factory keeps the first half of the signed file as `v2.0.0-trusted-truncated.bin`. The scenario filename refers to TLV metadata, but this is a coarse file truncation, not a precise mutation of a chosen tag-length-value field. A recognized clean verifier refusal passes; a traceback, timeout, or ambiguous nonzero result does not. See the [TLV reproduction status](docs/MCUBOOT_TLV_CRASH_REPORT.md).
 
 ```bash
 bootlab run-scenario scenarios/S04_truncated_tlv.yaml
@@ -438,7 +438,7 @@ bootlab run-scenario scenarios/V01_downgrade_enabled.yaml
 
 **Question:** how is the policy-disabled configuration represented?
 
-**Current check:** the same filter with `sig-ecdsa overwrite-only`. When downgrade prevention is absent, the pinned `run_nodowngrade()` helper returns immediately. A `pass (control)` is therefore a configuration control, **not evidence that an older image was accepted**. A paired image-injection test is needed to observe the full on/off behavioral contrast.
+**Current check:** the same upstream proxy with `sig-ecdsa overwrite-only`. The pinned helper returns early when prevention is disabled, so this scenario is `SKIP`; it does not establish acceptance of an older image. A paired direct-input test is required to observe the enabled/disabled contrast.
 
 ```bash
 bootlab run-scenario scenarios/V02_downgrade_disabled_control.yaml
@@ -879,7 +879,7 @@ bootlab generate-onepager
 bootlab generate-sbom
 ```
 
-`compare-profiles` compares available cases; the two profiles do not necessarily contain identical coverage. Evidence signatures cover canonical JSON record content, not the bytes in separately referenced log files. A valid signature authenticates the record under the selected signer key; it does not make an assertion stronger than the test that supplied it.
+`compare-profiles` compares selected cases; the two profiles do not necessarily contain identical coverage. Evidence signatures cover canonical record JSON with hashes for referenced logs and inputs. Verification uses the public key. A valid signature establishes integrity, not that an assertion proves more than the executed test.
 
 ### Explore parser mutations
 

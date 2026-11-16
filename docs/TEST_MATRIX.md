@@ -2,11 +2,11 @@
 
 [Project overview](../README.md) · [Visual walkthrough](../WALKTHROUGH.md) · [Documentation map](README.md)
 
-**33 scenario definitions, two backends, and explicit limits on each conclusion.** This is the coverage specification. Current verdicts belong in the generated `evidence/report.md`, not in permanent PASS badges here.
+**Scenario definitions, two backends, and explicit limits on each conclusion.** Run `bootlab validate-scenarios` to print the current definition count. Current verdicts belong in the generated report, not in permanent PASS badges here.
 
 ## 01 / Read a row
 
-- **Simulator** means a named upstream test filter, using internally generated images. Cargo filters may match more than one test.
+- **Simulator** means a named exact upstream test, using internally generated images. Cargo must report that test as executed.
 - **Verifier** means host-side `imgtool verify` against a corpus file and selected key.
 - **Expected check** describes the current oracle or helper. It is not a claim that this checkout has passed a run.
 
@@ -50,10 +50,10 @@ The verifier cases do not execute the bootloader. A nonzero return code alone do
 
 | ID | Executed features | Current behavior and limit |
 |---|---|---|
-| V01 | `sig-ecdsa downgrade-prevention overwrite-only` | Calls upstream `downgrade_prevention`, which checks the primary remains unchanged when policy is enabled. BootLab's YAML allows refusal **or** a new authenticated image, so its oracle uses Cargo success rather than its strict-refusal branch. |
-| V02 | `sig-ecdsa overwrite-only` | Disabled-policy control. Upstream `run_nodowngrade` returns early when prevention is disabled; a pass does not demonstrate acceptance of an older image. |
+| V01 | `sig-ecdsa downgrade-prevention overwrite-only` | Successful exact upstream test asserts its internal primary image remains unchanged; recorded as `PASS: UPSTREAM_PROXY_REFUSAL`, not direct BootLab-image validation. |
+| V02 | `sig-ecdsa overwrite-only` | Disabled-policy helper returns early; reported as `SKIP`, not evidence of older-image acceptance. |
 
-Both execute overwrite-only. V02's profile label is `mcuboot_swap_reference`, and V01's profile file also describes swap; `backend_args.cargo_features` controls the actual invocation. Neither case injects the declared BootLab v2/v1.5 corpus pair into the simulator.
+Both request overwrite-only. `backend_args.cargo_features` controls the actual Cargo invocation. Neither case injects the declared BootLab v2/v1.5 corpus pair into the simulator. V01 is an upstream proxy assertion; the paired direct-input contrast remains unsupported.
 
 ## 05 / Flash-operation campaigns · 6 cases
 
@@ -68,7 +68,7 @@ All rows select `fault_campaign_upgrade`, which checks the final new image and t
 | F01O | Overwrite / ECDSA | `0` | No-cut baseline |
 | F02O | Overwrite / ECDSA | `1` | Interruption before the first counted operation |
 
-The existing scenario names for F01/F02 describe different timing; the source counter behavior above is authoritative. F03/F04 labels are not measured sector/trailer events. The helper does not expose a reached/interrupted flag, so a passing F04 may include a device configuration whose upgrade finishes before index 570.
+The scenario names now follow the counter behavior. F03/F04 are numeric indices, not measured sector/trailer events. Positive-index rows require an explicit reached marker, emitted for each device/layout configuration by the local patch; unreached rows fail as coverage.
 
 ## 06 / Signature algorithms · 10 cases
 
@@ -109,12 +109,12 @@ bootlab run-scenario scenarios/F02_reset_after_first_write.yaml
 
 | Generated artifact | Producer |
 |---|---|
-| `evidence/<id>/record.json`, `stdout.txt`, `stderr.txt` | `run-scenario` or `run-matrix` |
+| `evidence/runs/<run-id>/<id>/record.json`, stdout and stderr logs | `run-scenario` or `run-matrix` |
 | `evidence/report.md` | `run-matrix` |
 | `evidence/comparison.md` | `compare-profiles` |
 | `evidence/fault_table.csv`, `fault_table.json` | `fault-sweep` |
 | `evidence/report_sanitized.md` | `sanitize-report` |
-| `evidence/<id>/record.json.sig` | Optional `sign-evidence` |
+| `evidence/runs/<run-id>/<id>/record.json.sig` | Optional `sign-evidence` |
 | `evidence/sbom.json` | `generate-sbom` |
 | `evidence/fuzz_results.json` | `fuzz-image` |
 | `out/site/`, `out/onepager.md` | `generate-site`, `generate-onepager` |

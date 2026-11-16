@@ -9,7 +9,7 @@
 | Location | Entry point | Purpose |
 |---|---|---|
 | [sim/src/image.rs](../vendor/mcuboot/sim/src/image.rs) | `run_upgrade_with_fault_at(index, permanent)` | Calls the existing `try_upgrade(Some(index), permanent)` |
-| Same file | `run_fault_campaign_check(index)` | Performs a permanent upgrade and checks final images/trailers; returns `true` on failure |
+| Same file | `run_fault_campaign_observation(index)` | Returns the recovery assertion, cut-reached flag, and total operation count |
 | [sim/tests/fault_campaign.rs](../vendor/mcuboot/sim/tests/fault_campaign.rs) | `fault_campaign_probe` | Prints operation counts for modeled configurations |
 | Same file | `fault_campaign_upgrade` | Reads `FAULT_INDEX`, iterates modeled devices, and asserts the helper reports no failure |
 
@@ -30,7 +30,7 @@ flowchart LR
     class A,B,D,E,F,G step;
 ```
 
-The C simulator decrements the counter **before** each counted write/erase and interrupts when the result becomes zero. Index `0` is a no-cut baseline; index `1` stops before the first counted operation. A requested index beyond the operation count also finishes without interruption. The public helper does not currently expose whether an interruption actually occurred.
+The C simulator decrements the counter **before** each counted write/erase and interrupts when the result becomes zero. Index `0` is a no-cut baseline; index `1` stops before the first counted operation. A requested index beyond the operation count also finishes without interruption. Patch 0002 emits a per-configuration ordinal, reached flag, total operation count, and final recovery assertion. It does not identify the underlying device layout or report the exact flash operation/location.
 
 ## 03 / Reproduce the extension directly
 
@@ -46,7 +46,7 @@ FAULT_INDEX=1 cargo test --manifest-path vendor/mcuboot/sim/Cargo.toml \
   fault_campaign_upgrade -- --exact --nocapture
 ```
 
-The probe prints one `FAULT_PROBE total_ops=...` line per exercised configuration. Do not assume one count applies to every layout.
+The probe prints one `FAULT_PROBE configuration=... total_ops=...` line per exercised configuration. The harness preserves each count; do not assume one count applies to every layout.
 
 The Python interface is:
 
@@ -54,10 +54,10 @@ The Python interface is:
 bootlab fault-sweep --indices 0,1,50 --features sig-ecdsa
 ```
 
-It writes sweep CSV/JSON plus per-index stdout/stderr under `evidence/fault_sweep/`. The adapter normally omits `--nocapture`, so the automatic probe can fail to see printed counts from passing tests. An explicit range or index list avoids that dependency.
+It writes sweep CSV/JSON plus per-index stdout/stderr under `evidence/fault_sweep/`. A positive index counts only when the per-configuration result explicitly reports `reached=true`; otherwise it is `NOT_REACHED` and fails coverage. Index zero is recorded as `NO_CUT_BASELINE`.
 
 ## 04 / Interpret the result
 
-A passing helper supports its final image/trailer assertions for the selected modeled configuration. It does not independently establish that the requested cut was reached, that the operation was a sector/trailer boundary, or that a physical device survives a power interruption.
+A passing helper supports its final image/trailer assertions for each emitted modeled configuration and records whether the requested cut was reached. Configuration IDs include the simulator device name, alignment, and erased value. The operation's flash address/type is not emitted, so sector/trailer labels remain unobserved. No result describes a physical device.
 
 Use [the fault-case walkthrough](../WALKTHROUGH.md#fault-cases) for scenario-specific counter values and [the evidence limitations](LIMITATIONS.md) for the scope of the resulting records.

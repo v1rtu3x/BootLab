@@ -25,8 +25,17 @@ cd "$MCUBOOT_DIR"
 
 for patch in "$PATCH_DIR"/*.patch; do
     if [[ -f "$patch" ]]; then
-        echo "Applying $(basename "$patch") ..."
-        git apply "$patch"
+        name="$(basename "$patch")"
+        if git apply --check "$patch" >/dev/null 2>&1; then
+            echo "Applying $name ..."
+            git apply "$patch"
+        elif git apply --reverse --check "$patch" >/dev/null 2>&1; then
+            echo "$name is already applied."
+        else
+            echo "Error: $name does not apply cleanly and is not already applied." >&2
+            echo "The submodule has incompatible or partially applied changes; inspect them before continuing." >&2
+            exit 1
+        fi
     fi
 done
 

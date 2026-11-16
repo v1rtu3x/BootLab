@@ -2,7 +2,7 @@
 
 [Project overview](../README.md) · [Visual walkthrough](../WALKTHROUGH.md) · [Documentation map](README.md)
 
-**Start with the layer that failed: setup, backend execution, oracle interpretation, or evidence presentation.** Preserve the failing logs before rerunning a case, because the same scenario ID writes to the same evidence paths.
+**Start with the layer that failed: setup, backend execution, oracle interpretation, or evidence presentation.** Scenario runs use unique run IDs, so a new run does not overwrite older records.
 
 ## 01 / Locate the problem
 
@@ -48,12 +48,12 @@ bootlab fuzz-image --help
 
 | Observation | Explanation | Inspect |
 |---|---|---|
-| Rejection case passes with a traceback | The matrix's negative verifier oracle accepts a nonzero exit | `stderr.txt` and [findings policy](FINDINGS_POLICY.md) |
+| Rejection case reports `ERROR` | Traceback, invocation issue, timeout, or ambiguous verifier output is not a clean rejection | `stderr_path` in the run record and [findings policy](FINDINGS_POLICY.md) |
 | Different IDs produce similar simulator output | Several cases use the same Cargo filter | `backend_args.cargo_test` and the upstream test body |
 | Overwrite baseline passes without an obvious upgrade | Some revert helpers return early in overwrite mode | P01O/P02O notes in [the matrix](TEST_MATRIX.md) |
-| Both downgrade cases pass | Enabled helper checks refusal; disabled helper returns early | Effective features, V01 oracle behavior, V02 skip scope |
+| V02 reports `SKIP` | The pinned feature-disabled helper returns early and does not observe acceptance | Effective features and declared intent in V01/V02 records |
 | Fault index zero produces no reset | Counter decrements before comparison, so zero does not trigger a cut | [Counter explanation](FAULT_INJECTION.md#02--counter-behavior) |
-| Large fault index passes quickly | The upgrade may finish before reaching the requested index | Probe counts for each modeled configuration; no reached-cut flag exists yet |
+| Positive fault index is not counted | Current simulator output does not emit an explicit reached marker | Fault record outcome and raw test output |
 | Profile says swap, command says overwrite | The adapter executes `backend_args`, not the full profile file | V01/V02 effective Cargo features |
 | “Rotation” case has no device activity | K01–K03 select one host verification key | [Key-case scope](../WALKTHROUGH.md#key-cases) |
 
@@ -77,7 +77,7 @@ This checks 11 indices. For human inspection of probe output, use the exact dire
 |---|---|
 | Single case ran but matrix report is unchanged | `run-scenario` writes that case's files; `run-matrix` generates the aggregate report |
 | Old and new results appear together | Generators can read existing records from earlier runs; retain or separate runs deliberately |
-| Comparison command exits successfully despite failures | `compare-profiles` does not propagate each failed case as a command failure; read its table |
+| Comparison command exits with failure | At least one selected case failed or was skipped; read its comparison table |
 | Record signature no longer verifies | Check whether a rerun or edit changed the JSON, whether the signature exists, and whether the local signer key matches |
 | Container results disappeared | A `--rm` container needs an evidence bind mount for host retention; see [Docker](DOCKER.md#03--keep-results-on-the-host) |
 | PNG/GIF missing | Install Pillow in the rendering environment and run `./scripts/generate-animations.sh` |

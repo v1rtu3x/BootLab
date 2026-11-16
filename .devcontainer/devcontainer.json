@@ -24,6 +24,7 @@
   "containerEnv": {
     "PYTHONPATH": "/opt/bootlab/src"
   },
-  "postCreateCommand": "bootlab run-matrix",
+  "workspaceFolder": "/opt/bootlab",
+  "postCreateCommand": "./scripts/apply-mcuboot-patches.sh && bootlab build-corpus && bootlab validate-scenarios",
   "remoteUser": "root"
 }
