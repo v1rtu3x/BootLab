@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives import serialization
 
 from bootlab.fuzz_image import (
     IMAGE_MAGIC,
@@ -147,9 +148,22 @@ def test_classify_outcome() -> None:
 def test_run_verify_rejects_bad_image(tmp_path: Path) -> None:
     """Integration check that imgtool rejects a known-bad image."""
     bad_image = Path("artifacts/corpus/v2.0.0-trusted-payload-flip.bin")
-    key = Path("fixtures/keys/dev-trusted-ecdsa-p256.pem")
-    if not bad_image.exists() or not key.exists():
-        pytest.skip("corpus or key not built")
+    if not bad_image.exists():
+        pytest.skip("corpus not built")
+
+    simulator_key = Path("vendor/mcuboot/root-ec-p256.pem")
+    if not simulator_key.exists():
+        pytest.skip("pinned MCUboot simulator key not available")
+    private_key = serialization.load_pem_private_key(
+        simulator_key.read_bytes(), password=None
+    )
+    key = tmp_path / "dev-trusted-public.pem"
+    key.write_bytes(
+        private_key.public_key().public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+    )
 
     returncode, stdout, stderr = run_verify(bad_image, key)
     outcome, _crash_type = classify_outcome(returncode, stdout, stderr)
