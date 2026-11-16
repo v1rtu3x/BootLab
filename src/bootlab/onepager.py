@@ -9,26 +9,72 @@ from urllib.parse import quote
 
 
 SCENARIO_GROUPS = [
-    ("Baseline", "P01, P02, P01O, P02O", "Upstream boot/update proxies; overwrite helpers can skip their main body."),
-    ("Trial / confirm", "P03, P04", "Upstream revert and persistence assertions under the selected features."),
-    ("Integrity", "S01, S03", "Offline verification of selected payload/header mutations."),
-    ("Authenticity", "S02, S06", "Host key verification and a separate runtime bad-signature test."),
-    ("Validation", "S04, S05", "Truncated-file verification and simulated slot-size rejection."),
-    ("Version policy", "V01, V02", "V01 is an upstream refusal proxy; V02 is skipped because the disabled helper returns early."),
-    ("Fault recovery", "F01–F04, F01O–F02O", "Numeric interruption campaigns; index 0 makes no cut."),
-    ("Algorithm diversity", "A01–A10", "Selected simulator and verifier checks under RSA-2048 and Ed25519."),
-    ("Key selection", "K01–K03", "Host verification against a selected key; no device trust-store update."),
+    (
+        "Baseline",
+        "P01, P02, A01–A04",
+        "Upstream boot/update proxy assertions using upstream fixture images.",
+    ),
+    (
+        "Trial / confirm",
+        "P03, P04",
+        "Upstream revert and persistence assertions under the selected features.",
+    ),
+    (
+        "Integrity",
+        "S01, S03",
+        "Offline verification of selected payload/header mutations.",
+    ),
+    (
+        "Authenticity",
+        "S02, S06",
+        "Host key verification and a separate runtime bad-signature test.",
+    ),
+    (
+        "Validation",
+        "S04, S05",
+        "Truncated-file verification and simulated slot-size rejection.",
+    ),
+    (
+        "Version policy",
+        "V01, V02",
+        "Direct corpus-image pair: older image refused with policy enabled and accepted when disabled.",
+    ),
+    (
+        "Fault recovery",
+        "F01–F04, F01O–F02O, D06",
+        "Per-configuration modeled interruption observations; D06 asserts a reached cut.",
+    ),
+    (
+        "Algorithm diversity",
+        "A01–A10",
+        "Selected simulator and verifier checks under RSA-2048 and Ed25519.",
+    ),
+    (
+        "Key selection",
+        "K01–K03",
+        "Host verification against a selected key; no device trust-store update.",
+    ),
+    (
+        "Direct image checks",
+        "D01–D03, D06",
+        "Inject corpus bytes and observe selected image/version, hashes, and recovery state.",
+    ),
 ]
 
 STANDARDS = [
     ("NIST SP 800-193", "Platform firmware resiliency, recovery, rollback protection"),
     ("IEC 62443-4-2", "Secure boot and software integrity"),
     ("ETSI EN 303 645", "Secure software updates, no downgrades"),
-    ("OWASP Firmware Security Testing Guide", "Bootloader signature, downgrade, and fault-injection testing"),
+    (
+        "OWASP Firmware Security Testing Guide",
+        "Bootloader signature, downgrade, and fault-injection testing",
+    ),
 ]
 
 
-def generate_onepager(workspace: Path, output: Path, provenance: dict[str, Any] | None = None) -> Path:
+def generate_onepager(
+    workspace: Path, output: Path, provenance: dict[str, Any] | None = None
+) -> Path:
     """Write a Markdown one-pager summarizing the lab."""
     output.parent.mkdir(parents=True, exist_ok=True)
     scenario_count = len(list((workspace / "scenarios").glob("*.yaml")))
@@ -58,58 +104,66 @@ def generate_onepager(workspace: Path, output: Path, provenance: dict[str, Any] 
     for group, ids, guarantee in SCENARIO_GROUPS:
         lines.append(f"| **{group}** | {ids} | {guarantee} |")
 
-    lines.extend([
-        "",
-        "## Run the lab",
-        "",
-        "Requires Python, Rust/C build tools, and the complete vendored MCUboot source. The first build can take several minutes.",
-        "",
-        "```bash",
-        "cd BootLab",
-        "git submodule update --init --recursive",
-        "./scripts/apply-mcuboot-patches.sh",
-        "python3 -m venv .venv && source .venv/bin/activate",
-        "pip install -e '.[dev]'",
-        "pip install ./vendor/mcuboot/scripts",
-        "bootlab build-corpus",
-        "bootlab run-matrix",
-        "bootlab tutorial",
-        "bootlab generate-site",
-        "bootlab sign-evidence",
-        "```",
-        "",
-        "## Related assurance topics",
-        "",
-        "These are review topics, not a compliance assessment or certification result.",
-        "",
-        "| Standard / guideline | Review topic |",
-        "|---|---|",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Run the lab",
+            "",
+            "Requires Python, Rust/C build tools, and the complete vendored MCUboot source. The first build can take several minutes.",
+            "",
+            "```bash",
+            "cd BootLab",
+            "git submodule update --init --recursive",
+            "./scripts/apply-mcuboot-patches.sh",
+            "python3 -m venv .venv && source .venv/bin/activate",
+            "pip install -e '.[dev]'",
+            "pip install ./vendor/mcuboot/scripts",
+            "bootlab build-corpus",
+            "bootlab run-matrix",
+            "bootlab tutorial",
+            "bootlab generate-site",
+            "bootlab sign-evidence",
+            "```",
+            "",
+            "## Related assurance topics",
+            "",
+            "These are review topics, not a compliance assessment or certification result.",
+            "",
+            "| Standard / guideline | Review topic |",
+            "|---|---|",
+        ]
+    )
 
     for std, coverage in STANDARDS:
         lines.append(f"| {std} | {coverage} |")
 
     if provenance:
-        lines.extend([
-            "",
-            "## Provenance",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "## Provenance",
+                "",
+            ]
+        )
         for key, value in provenance.items():
             lines.append(f"- **{key}**: {value}")
 
-    lines.extend([
-        "",
-        "## Learn more",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Learn more",
+            "",
+        ]
+    )
     for label, relative_path in [
         ("Full walkthrough", "WALKTHROUGH.md"),
         ("Threat model", "docs/THREAT_MODEL.md"),
         ("Test matrix", "docs/TEST_MATRIX.md"),
         ("Evidence limitations", "docs/LIMITATIONS.md"),
     ]:
-        target = Path(os.path.relpath(workspace / relative_path, output.parent)).as_posix()
+        target = Path(
+            os.path.relpath(workspace / relative_path, output.parent)
+        ).as_posix()
         lines.append(f"- [{label}]({quote(target, safe='/')})")
     lines.append("")
 

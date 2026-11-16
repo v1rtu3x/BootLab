@@ -30,7 +30,9 @@ class Report:
             f"Total cases: {len(self.records)}",
         ]
         passed = sum(1 for r in self.records if r.get("passed"))
-        skipped = sum(1 for r in self.records if r.get("verdict") in {"SKIP", "NOT_EXECUTED"})
+        skipped = sum(
+            1 for r in self.records if r.get("verdict") in {"SKIP", "NOT_EXECUTED"}
+        )
         failed = len(self.records) - passed - skipped
         infra = sum(1 for r in self.records if r.get("infrastructure_error"))
         lines.extend(
@@ -104,7 +106,9 @@ class Report:
     def render_sanitized_markdown(self) -> str:
         """Render a public, sanitized report without host paths or raw logs."""
         passed = sum(1 for r in self.records if r.get("passed"))
-        skipped = sum(1 for r in self.records if r.get("verdict") in {"SKIP", "NOT_EXECUTED"})
+        skipped = sum(
+            1 for r in self.records if r.get("verdict") in {"SKIP", "NOT_EXECUTED"}
+        )
         failed = len(self.records) - passed - skipped
         lines: list[str] = [
             "# BootLab Assurance Report (sanitized)",

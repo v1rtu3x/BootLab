@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import html
 import json
+import re
 import shutil
 from pathlib import Path
-import re
 from typing import Any
+
+import yaml
 
 
 def _record_slug(record: dict[str, Any]) -> str:
@@ -19,15 +21,16 @@ def _record_slug(record: dict[str, Any]) -> str:
     run_id = str(record.get("run_id", "legacy"))
     return re.sub(r"[^A-Za-z0-9_-]", "_", f"{case_id}-{run_id}")
 
-import yaml
-
 
 class SiteGenerator:
     """Generate a self-contained static website from evidence records."""
 
-    def __init__(self, workspace: Path, output_dir: Path) -> None:
+    def __init__(
+        self, workspace: Path, output_dir: Path, run_ids: list[str] | None = None
+    ) -> None:
         self.workspace = workspace
         self.output_dir = output_dir
+        self.run_ids = run_ids
         self.records: list[dict[str, Any]] = []
         self.scenarios: dict[str, dict[str, Any]] = {}
         self.mcuboot_commit = "unknown"
@@ -45,8 +48,16 @@ class SiteGenerator:
         self._write_about()
 
     def _load_records(self) -> None:
-        evidence_dir = self.workspace / "evidence"
-        for record_path in sorted(evidence_dir.rglob("record.json")):
+        runs_dir = self.workspace / "evidence" / "runs"
+        run_ids = self.run_ids or sorted(
+            path.name for path in runs_dir.iterdir() if path.is_dir()
+        )
+        record_paths = [
+            record_path
+            for run_id in run_ids
+            for record_path in (runs_dir / run_id).rglob("record.json")
+        ]
+        for record_path in sorted(record_paths):
             record = json.loads(record_path.read_text())
             self.records.append(record)
             if self.mcuboot_commit == "unknown" and record.get("mcuboot_commit"):
@@ -69,8 +80,11 @@ class SiteGenerator:
 
     def _copy_referenced_logs(self) -> None:
         for record in self.records:
-            for key in ("stdout_path", "stderr_path"):
-                relative = record.get(key)
+            paths = [record.get("stdout_path"), record.get("stderr_path")]
+            paths.extend(
+                item.get("path") for item in record.get("input_sha256", {}).values()
+            )
+            for relative in paths:
                 if not relative:
                     continue
                 source = self.workspace / relative
@@ -315,7 +329,9 @@ pre {
     def _write_index(self) -> None:
         total = len(self.records)
         passed = sum(1 for r in self.records if r.get("passed"))
-        skipped = sum(1 for r in self.records if r.get("verdict") in {"SKIP", "NOT_EXECUTED"})
+        skipped = sum(
+            1 for r in self.records if r.get("verdict") in {"SKIP", "NOT_EXECUTED"}
+        )
         failed = total - passed - skipped
 
         cards = f"""
@@ -342,7 +358,11 @@ pre {
         for record in self.records:
             case_id = record.get("case_id", "?")
             slug = _record_slug(record)
-            cls = "heatmap-skip" if record.get("verdict") in {"SKIP", "NOT_EXECUTED"} else ("heatmap-pass" if record.get("passed") else "heatmap-fail")
+            cls = (
+                "heatmap-skip"
+                if record.get("verdict") in {"SKIP", "NOT_EXECUTED"}
+                else ("heatmap-pass" if record.get("passed") else "heatmap-fail")
+            )
             heatmap_html += (
                 f'  <a class="{cls}" href="scenario/{html.escape(slug)}.html" '
                 f'title="{html.escape(case_id)}">{html.escape(case_id)}</a>\n'
@@ -356,7 +376,11 @@ pre {
             category = html.escape(record.get("category", "?"))
             backend = html.escape(record.get("backend", "?"))
             verdict = html.escape(str(record.get("verdict", "unknown")))
-            badge = "badge-skip" if record.get("verdict") in {"SKIP", "NOT_EXECUTED"} else ("badge-pass" if record.get("passed") else "badge-fail")
+            badge = (
+                "badge-skip"
+                if record.get("verdict") in {"SKIP", "NOT_EXECUTED"}
+                else ("badge-pass" if record.get("passed") else "badge-fail")
+            )
             slug = _record_slug(record)
             matrix_rows.append(
                 f"<tr>"
@@ -379,7 +403,7 @@ pre {
     <tr><th>ID</th><th>Name</th><th>Category</th><th>Backend</th><th>Verdict</th></tr>
   </thead>
   <tbody>
-    {''.join(matrix_rows)}
+    {"".join(matrix_rows)}
   </tbody>
 </table>
 <div class="mermaid">
@@ -406,11 +430,11 @@ flowchart LR
             case_id = record.get("case_id", "?")
             scenario = self.scenarios.get(case_id, {})
             page = self._scenario_page(record, scenario)
-            (self.output_dir / "scenario" / f"{_record_slug(record)}.html").write_text(page)
+            (self.output_dir / "scenario" / f"{_record_slug(record)}.html").write_text(
+                page
+            )
 
-    def _scenario_page(
-        self, record: dict[str, Any], scenario: dict[str, Any]
-    ) -> str:
+    def _scenario_page(self, record: dict[str, Any], scenario: dict[str, Any]) -> str:
         case_id = html.escape(record.get("case_id", "?"))
         name = html.escape(record.get("case_name", "?"))
         category = html.escape(record.get("category", "?"))
@@ -418,7 +442,11 @@ flowchart LR
         backend = html.escape(record.get("backend", "?"))
         verdict = html.escape(str(record.get("verdict", "unknown")))
         passed = record.get("passed", False)
-        badge_class = "badge-skip" if record.get("verdict") in {"SKIP", "NOT_EXECUTED"} else ("badge-pass" if passed else "badge-fail")
+        badge_class = (
+            "badge-skip"
+            if record.get("verdict") in {"SKIP", "NOT_EXECUTED"}
+            else ("badge-pass" if passed else "badge-fail")
+        )
         timestamp = html.escape(record.get("timestamp_utc", "unknown"))
         elapsed = record.get("elapsed_seconds")
         elapsed_str = f"{elapsed:.3f} s" if elapsed is not None else "n/a"
@@ -427,11 +455,13 @@ flowchart LR
         stderr_rel = record.get("stderr_path")
         stdout_link = (
             f'<a href="../{stdout_rel}">{html.escape(stdout_rel)}</a>'
-            if stdout_rel else "n/a"
+            if stdout_rel
+            else "n/a"
         )
         stderr_link = (
             f'<a href="../{stderr_rel}">{html.escape(stderr_rel)}</a>'
-            if stderr_rel else "n/a"
+            if stderr_rel
+            else "n/a"
         )
 
         details = record.get("details", {})
@@ -442,7 +472,7 @@ flowchart LR
         if notes:
             notes_html = (
                 '<div class="panel"><h3>Scenario Notes</h3>\n'
-                f'<pre>{html.escape(str(notes).rstrip())}</pre></div>'
+                f"<pre>{html.escape(str(notes).rstrip())}</pre></div>"
             )
 
         body = f"""
@@ -507,4 +537,6 @@ flowchart TB
   </ul>
 </div>
 """
-        (self.output_dir / "about.html").write_text(self._page("About", body, root_prefix=""))
+        (self.output_dir / "about.html").write_text(
+            self._page("About", body, root_prefix="")
+        )
