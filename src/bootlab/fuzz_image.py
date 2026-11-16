@@ -110,7 +110,10 @@ def parse_image_info(data: bytes) -> ImageInfo:
 
     if tlv_offset + TLV_INFO_SIZE <= len(data):
         tlv_magic, tlv_total = struct.unpack_from("<HH", data, tlv_offset)
-        if tlv_magic == TLV_PROT_INFO_MAGIC and tlv_offset + tlv_total + TLV_INFO_SIZE <= len(data):
+        if (
+            tlv_magic == TLV_PROT_INFO_MAGIC
+            and tlv_offset + tlv_total + TLV_INFO_SIZE <= len(data)
+        ):
             tlv_offset += tlv_total
             tlv_magic, tlv_total = struct.unpack_from("<HH", data, tlv_offset)
 
@@ -128,7 +131,9 @@ def parse_image_info(data: bytes) -> ImageInfo:
     )
 
 
-def _find_signature_tlv(data: bytes, tlv_offset: int, tlv_total: int) -> tuple[int, int] | None:
+def _find_signature_tlv(
+    data: bytes, tlv_offset: int, tlv_total: int
+) -> tuple[int, int] | None:
     """Return (payload_start, payload_length) of the first signature TLV."""
     cursor = tlv_offset + TLV_INFO_SIZE
     end = tlv_offset + tlv_total
@@ -176,9 +181,15 @@ def _rand_in_range(rng: random.Random, start: int, end: int) -> int:
 # Structured mutators
 # ---------------------------------------------------------------------------
 
+
 def mutate_header_magic(data: bytearray, info: ImageInfo, rng: random.Random) -> str:
     """Corrupt the 4-byte image magic."""
-    choices = [0x00000000, 0xDEADBEEF, IMAGE_MAGIC ^ 0xFFFFFFFF, (IMAGE_MAGIC + 1) & 0xFFFFFFFF]
+    choices = [
+        0x00000000,
+        0xDEADBEEF,
+        IMAGE_MAGIC ^ 0xFFFFFFFF,
+        (IMAGE_MAGIC + 1) & 0xFFFFFFFF,
+    ]
     value = rng.choice(choices)
     _set_u32(data, OFF_MAGIC, value)
     return f"header_magic=0x{value:08x}"
@@ -188,7 +199,9 @@ def mutate_header_size(data: bytearray, info: ImageInfo, rng: random.Random) -> 
     """Change header_size to an invalid but in-bounds value."""
     max_header = max(IMAGE_HEADER_SIZE, info.data_len - TLV_INFO_SIZE)
     candidates = [0, 1, IMAGE_HEADER_SIZE, info.header_size - 1, info.header_size + 1]
-    candidates = [c for c in candidates if IMAGE_HEADER_SIZE <= c <= max_header or c == 0]
+    candidates = [
+        c for c in candidates if IMAGE_HEADER_SIZE <= c <= max_header or c == 0
+    ]
     if not candidates or rng.random() < 0.2:
         value = _rand_in_range(rng, IMAGE_HEADER_SIZE, max_header + 1)
     else:
@@ -209,7 +222,9 @@ def mutate_version_minor(data: bytearray, info: ImageInfo, rng: random.Random) -
     return f"version_minor={value}"
 
 
-def mutate_version_revision(data: bytearray, info: ImageInfo, rng: random.Random) -> str:
+def mutate_version_revision(
+    data: bytearray, info: ImageInfo, rng: random.Random
+) -> str:
     value = rng.randrange(0x10000)
     _set_u16(data, OFF_VERSION_REVISION, value)
     return f"version_revision={value}"
@@ -252,8 +267,7 @@ def mutate_tlv_lengths(data: bytearray, info: ImageInfo, rng: random.Random) -> 
     # Determine whether we can truncate the total TLV area before the signature
     # entry header so the verifier no longer finds the signature.
     can_truncate_total = (
-        info.tlv_offset + TLV_INFO_SIZE <= info.data_len
-        and info.sig_tlv is not None
+        info.tlv_offset + TLV_INFO_SIZE <= info.data_len and info.sig_tlv is not None
     )
     if can_truncate_total:
         sig_entry_offset = info.sig_tlv[0] - TLV_SIZE
@@ -265,7 +279,11 @@ def mutate_tlv_lengths(data: bytearray, info: ImageInfo, rng: random.Random) -> 
         tlv_type, payload_start, tlv_len = entries[0]
         max_len = max(0, info.data_len - payload_start)
         candidates = [0, 1, max(0, tlv_len - 1), min(tlv_len + 1, max_len)]
-        value = rng.choice(candidates) if rng.random() < 0.7 else _rand_in_range(rng, 0, max_len + 1)
+        value = (
+            rng.choice(candidates)
+            if rng.random() < 0.7
+            else _rand_in_range(rng, 0, max_len + 1)
+        )
         entry_offset = payload_start - TLV_SIZE
         _set_u16(data, entry_offset + 2, value)
         return f"tlv_entry_type=0x{tlv_type:02x}_length={value}"
@@ -273,8 +291,10 @@ def mutate_tlv_lengths(data: bytearray, info: ImageInfo, rng: random.Random) -> 
     if can_truncate_total:
         sig_entry_offset = info.sig_tlv[0] - TLV_SIZE
         safe_max_total = sig_entry_offset - info.tlv_offset
-        value = rng.choice([TLV_INFO_SIZE, safe_max_total]) if rng.random() < 0.5 else _rand_in_range(
-            rng, TLV_INFO_SIZE, safe_max_total + 1
+        value = (
+            rng.choice([TLV_INFO_SIZE, safe_max_total])
+            if rng.random() < 0.5
+            else _rand_in_range(rng, TLV_INFO_SIZE, safe_max_total + 1)
         )
         _set_u16(data, info.tlv_offset + 2, value)
         return f"tlv_total_length={value}"
@@ -323,6 +343,7 @@ MUTATORS: list[Callable[[bytearray, ImageInfo, random.Random], str]] = [
 # Verification and classification
 # ---------------------------------------------------------------------------
 
+
 def run_verify(image_path: Path, key_path: Path) -> tuple[int, str, str]:
     """Run ``imgtool verify`` and return (returncode, stdout, stderr)."""
     try:
@@ -337,7 +358,11 @@ def run_verify(image_path: Path, key_path: Path) -> tuple[int, str, str]:
         )
         return result.returncode, result.stdout, result.stderr
     except subprocess.TimeoutExpired as exc:
-        return 124, _output_text(exc.stdout), _output_text(exc.stderr) or "imgtool verification timed out"
+        return (
+            124,
+            _output_text(exc.stdout),
+            _output_text(exc.stderr) or "imgtool verification timed out",
+        )
     except (OSError, PermissionError) as exc:
         return 127, "", f"imgtool execution error: {exc}"
 
@@ -345,10 +370,14 @@ def run_verify(image_path: Path, key_path: Path) -> tuple[int, str, str]:
 def _output_text(value: str | bytes | None) -> str:
     if value is None:
         return ""
-    return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value
+    return (
+        value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value
+    )
 
 
-def classify_outcome(returncode: int, stdout: str, stderr: str) -> tuple[str, str | None]:
+def classify_outcome(
+    returncode: int, stdout: str, stderr: str
+) -> tuple[str, str | None]:
     """Classify the verifier result as accepted, rejected, or crash.
 
     Returns a tuple of (outcome, crash_type). crash_type is a short label such
@@ -379,13 +408,18 @@ def classify_outcome(returncode: int, stdout: str, stderr: str) -> tuple[str, st
                 break
         return "crash", crash_type or "Exception"
 
-    if re.search(r"(?im)^\s*(?:usage:|error: unrecognized arguments|no such file|can't open file)", combined):
+    if re.search(
+        r"(?im)^\s*(?:usage:|error: unrecognized arguments|no such file|can't open file)",
+        combined,
+    ):
         return "crash", "invocation_error"
 
     if returncode == 0:
         return "accepted", None
 
-    if any(re.search(pattern, combined, re.IGNORECASE) for pattern in REJECTION_PATTERNS):
+    if any(
+        re.search(pattern, combined, re.IGNORECASE) for pattern in REJECTION_PATTERNS
+    ):
         return "rejected", None
 
     return "crash", "unknown"
@@ -394,6 +428,7 @@ def classify_outcome(returncode: int, stdout: str, stderr: str) -> tuple[str, st
 # ---------------------------------------------------------------------------
 # Harness
 # ---------------------------------------------------------------------------
+
 
 class FuzzHarness:
     """Structured mutation fuzzer for MCUboot signed images."""
@@ -417,7 +452,9 @@ class FuzzHarness:
         self.results: list[FuzzResult] = []
         self.summary: FuzzSummary | None = None
 
-    def _save_reproducer(self, iteration: int, outcome: str, crash_type: str | None, data: bytes) -> Path | None:
+    def _save_reproducer(
+        self, iteration: int, outcome: str, crash_type: str | None, data: bytes
+    ) -> Path | None:
         """Save an interesting mutated image to disk for later analysis."""
         if self.reproducers_dir is None:
             return None
@@ -463,7 +500,9 @@ class FuzzHarness:
 
             reproducer_path: Path | None = None
             if outcome in ("accepted", "crash", "timeout", "error"):
-                reproducer_path = self._save_reproducer(iteration, outcome, crash_type, bytes(data))
+                reproducer_path = self._save_reproducer(
+                    iteration, outcome, crash_type, bytes(data)
+                )
 
             result = FuzzResult(
                 iteration=iteration,
@@ -479,7 +518,9 @@ class FuzzHarness:
 
             if outcome in ("accepted", "crash", "timeout", "error"):
                 early_stop = True
-                stop_reason = f"{outcome} ({crash_type or 'n/a'}) at iteration {iteration}"
+                stop_reason = (
+                    f"{outcome} ({crash_type or 'n/a'}) at iteration {iteration}"
+                )
                 break
 
         self.summary = FuzzSummary(
@@ -503,7 +544,11 @@ class FuzzHarness:
         if self.summary is None:
             raise RuntimeError("Run the harness before writing results")
 
-        interesting = [asdict(r) for r in self.results if r.outcome in ("accepted", "crash", "timeout", "error")]
+        interesting = [
+            asdict(r)
+            for r in self.results
+            if r.outcome in ("accepted", "crash", "timeout", "error")
+        ]
         report = {
             "summary": asdict(self.summary),
             "interesting": interesting,

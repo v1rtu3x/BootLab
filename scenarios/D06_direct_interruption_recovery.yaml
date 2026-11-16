@@ -1,0 +1,31 @@
+id: D06
+name: direct-reached-interruption-recovers
+category: fault
+profile: mcuboot_overwrite_reference
+primary:
+  name: v1.0.0-trusted
+  version: 1.0.0
+  trusted: true
+secondary:
+  name: v2.0.0-trusted
+  version: 2.0.0
+  trusted: true
+operation: stage_then_upgrade
+backend: mcuboot_sim
+backend_args:
+  cargo_test: bootlab_direct_image
+  cargo_features: sig-ecdsa overwrite-only
+  primary_image: v1.0.0-trusted.signed.bin
+  candidate_image: v2.0.0-trusted.signed.bin
+  expected_selection: candidate
+  key_type: ecdsa-p256
+  env:
+    BOOTLAB_FAULT_INDEX: "1"
+fault:
+  type: reset
+  point: modeled_flash_operation_1
+  index: 1
+expect:
+  outcome_in: [new_authenticated_image]
+  booted_version: "2.0.0"
+notes: "Asserts that modeled operation index 1 interrupted boot and the subsequent boot selected the valid candidate."

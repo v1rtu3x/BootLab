@@ -124,12 +124,24 @@ class TestMutators:
 
 
 def test_classify_outcome() -> None:
-    assert classify_outcome(0, "Image was correctly validated", "") == ("accepted", None)
+    assert classify_outcome(0, "Image was correctly validated", "") == (
+        "accepted",
+        None,
+    )
     assert classify_outcome(1, "", "Image has an invalid hash") == ("rejected", None)
-    assert classify_outcome(1, "Traceback (most recent call):", "") == ("crash", "Exception")
+    assert classify_outcome(1, "Traceback (most recent call):", "") == (
+        "crash",
+        "Exception",
+    )
     assert classify_outcome(1, "", "") == ("crash", "unknown")
-    assert classify_outcome(124, "", "imgtool verification timed out") == ("timeout", "TimeoutExpired")
-    assert classify_outcome(127, "", "imgtool execution error: missing") == ("error", "execution_error")
+    assert classify_outcome(124, "", "imgtool verification timed out") == (
+        "timeout",
+        "TimeoutExpired",
+    )
+    assert classify_outcome(127, "", "imgtool execution error: missing") == (
+        "error",
+        "execution_error",
+    )
 
 
 def test_run_verify_rejects_bad_image(tmp_path: Path) -> None:
@@ -175,7 +187,9 @@ def test_fuzz_harness_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert data["interesting"] == []
 
 
-def test_fuzz_harness_stops_on_accept(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fuzz_harness_stops_on_accept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Early stop is recorded when a mutation is unexpectedly accepted."""
     from bootlab.fuzz_image import FuzzHarness
 

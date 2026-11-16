@@ -1,0 +1,27 @@
+id: D02
+name: direct-payload-modification-rejected
+category: integrity
+profile: mcuboot_overwrite_reference
+primary:
+  name: v1.0.0-trusted
+  version: 1.0.0
+  trusted: true
+secondary:
+  name: v2.0.0-trusted-payload-flip
+  version: 2.0.0
+  trusted: false
+operation: stage_then_upgrade
+backend: mcuboot_sim
+backend_args:
+  cargo_test: bootlab_direct_image
+  cargo_features: sig-ecdsa overwrite-only
+  primary_image: v1.0.0-trusted.signed.bin
+  candidate_image: v2.0.0-trusted-payload-flip.bin
+  expected_selection: primary
+  key_type: ecdsa-p256
+fault:
+  type: none
+expect:
+  outcome_in: [secure_refusal, old_authenticated_image]
+  booted_version: "1.0.0"
+notes: "The payload is modified after signing. MCUboot must retain the authenticated primary image."

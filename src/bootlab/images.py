@@ -23,6 +23,14 @@ KEY_TYPE_TO_CARGO_FEATURE: dict[str, str] = {
     "ed25519": "sig-ed25519",
 }
 
+SIMULATOR_ROOT_KEYS = {
+    "ecdsa-p256": "root-ec-p256-pkcs8.pem",
+    "ecdsa-p384": "root-ec-p384-pkcs8.pem",
+    "rsa-2048": "root-rsa-2048.pem",
+    "rsa-3072": "root-rsa-3072.pem",
+    "ed25519": "root-ed25519.pem",
+}
+
 
 @dataclass(frozen=True)
 class ImageSpec:
@@ -57,12 +65,14 @@ class ImageFactory:
         header_size: int = 0x200,
         slot_size: int = 0x034000,
         align: int = 8,
+        simulator_key_dir: Path | None = None,
     ) -> None:
         self.corpus_dir = corpus_dir
         self.keys_dir = keys_dir
         self.header_size = header_size
         self.slot_size = slot_size
         self.align = align
+        self.simulator_key_dir = simulator_key_dir
         self.corpus_dir.mkdir(parents=True, exist_ok=True)
         self.keys_dir.mkdir(parents=True, exist_ok=True)
 
@@ -70,6 +80,14 @@ class ImageFactory:
         return self.keys_dir / f"{key_id}-{key_type}.pem"
 
     def _ensure_key(self, key_id: str, key_type: str) -> Path:
+        if key_id == "dev-trusted" and self.simulator_key_dir is not None:
+            root_name = SIMULATOR_ROOT_KEYS.get(key_type)
+            root_key = self.simulator_key_dir / root_name if root_name else None
+            if root_key is None or not root_key.is_file():
+                raise FileNotFoundError(
+                    f"No pinned MCUboot simulator trust key for {key_type}"
+                )
+            return root_key
         key_path = self._key_path(key_id, key_type)
         if key_path.exists():
             return key_path
@@ -115,9 +133,6 @@ class ImageFactory:
             str(payload_path),
             str(output_path),
         ]
-        if spec.key_type == "ed25519":
-            # Ed25519 uses a pure signature variant in MCUboot by default for this lab.
-            cmd.append("--pure")
         subprocess.run(cmd, check=True, capture_output=True, text=True)
 
     def _mutate(self, spec: ImageSpec, signed_path: Path) -> Path:

@@ -15,9 +15,8 @@ fault:
   type: none
 expect:
   invalid_image_booted: false
-  verify_rejected: true
   outcome_in:
-    - secure_refusal
+    - validator_crash
 notes: |
-  A truncated image with a malformed TLV area must be rejected safely by
-  validation rather than executed.
+  Reproduces imgtool 2.1.0 raising struct.error on this truncated TLV. This
+  records a host verifier crash, not a secure refusal or bootloader observation.

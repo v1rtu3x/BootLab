@@ -37,7 +37,6 @@ security_counter:
 features:
   - sig-ecdsa
   - swap-scratch
-  - downgrade-prevention  # available, disabled by default in this profile
 notes: |
   Development-only signing keys are generated on first corpus build.
   Simulated reset/fault injection is logical only; not hardware fault resistance.

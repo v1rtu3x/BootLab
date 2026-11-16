@@ -1,0 +1,5 @@
+# SHA-256 of affected upstream files before the patch, for source-only archives.
+# The source tree is accepted only when every value matches and every ABSENT path is missing.
+9fd0512eeac23628920f21e8cb2cfbebd7b0772d2d0df5696592d9e0b74486bc  sim/src/image.rs
+ABSENT  sim/tests/fault_campaign.rs
+ABSENT  sim/tests/bootlab_direct.rs

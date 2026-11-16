@@ -1,5 +1,5 @@
 id: F04
-name: swap-interruption-at-operation-index-570
+name: swap-interruption-at-operation-index-300
 category: fault
 profile: mcuboot_swap_reference
 primary:
@@ -16,16 +16,17 @@ backend_args:
   cargo_test: fault_campaign_upgrade
   cargo_features: sig-ecdsa
   env:
-    FAULT_INDEX: "570"
+    FAULT_INDEX: "300"
 fault:
   type: reset
-  point: before_counted_operation_570
-  index: 570
+  point: before_counted_operation_300
+  index: 300
 expect:
   invalid_image_booted: false
   outcome_in:
     - old_authenticated_image
     - new_authenticated_image
 notes: |
-  Interrupt before modeled operation 570 if the counter reaches it. The
-  simulator does not identify this numeric index as a trailer metadata write.
+  Interrupt before modeled operation 300, which is within the common reachable
+  range for all simulator configurations. The simulator does not identify this
+  numeric index as a trailer metadata write.

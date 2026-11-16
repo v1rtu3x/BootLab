@@ -6,7 +6,7 @@
      ram: RamData,
 +    configuration_id: String,
  }
-
+ 
  /// Images represents the state of a simulation for a given set of images.
 @@ -78,6 +79,19 @@
      images: Vec<OneImage>,
@@ -26,7 +26,7 @@
 +    pub primary_trailer_valid: bool,
 +    pub secondary_trailer_valid: bool,
  }
-
+ 
  /// When doing multi-image, there is an instance of this information for
 @@ -234,6 +248,7 @@
              areadesc,
@@ -35,7 +35,7 @@
 +            configuration_id: format!("{}-align-{}-erased-{:02x}", device, align, erased_val),
          })
      }
-
+ 
 @@ -362,6 +377,7 @@
              images,
              total_count: None,
@@ -43,7 +43,7 @@
 +            configuration_id: self.configuration_id,
          }
      }
-
+ 
 @@ -415,6 +431,7 @@
              images,
              total_count: None,
@@ -51,7 +51,7 @@
 +            configuration_id: self.configuration_id,
          }
      }
-
+ 
 @@ -462,6 +479,7 @@
              images,
              total_count: None,
@@ -59,7 +59,7 @@
 +            configuration_id: self.configuration_id,
          }
      }
-
+ 
 @@ -485,6 +503,7 @@
              images,
              total_count: None,
@@ -67,7 +67,7 @@
 +            configuration_id: self.configuration_id,
          }
      }
-
+ 
 @@ -507,6 +526,7 @@
              images,
              total_count: None,
@@ -75,7 +75,7 @@
 +            configuration_id: self.configuration_id,
          }
      }
-
+ 
 @@ -529,6 +549,7 @@
              images,
              total_count: None,
@@ -83,7 +83,7 @@
 +            configuration_id: self.configuration_id,
          }
      }
-
+ 
 @@ -551,6 +572,7 @@
              images,
              total_count: None,
@@ -91,7 +91,7 @@
 +            configuration_id: self.configuration_id,
          }
      }
-
+ 
 @@ -575,6 +597,7 @@
              images,
              total_count: None,
@@ -99,10 +99,132 @@
 +            configuration_id: self.configuration_id,
          }
      }
-
-@@ -807,6 +830,11 @@
+ 
+@@ -804,9 +827,133 @@
+     pub fn num_images(&self) -> usize {
+         self.slots.len()
+     }
++
++    /// Boot actual imgtool-produced images supplied by the BootLab harness.
++    /// The simulator installs these bytes into one modeled layout, runs the
++    /// upstream bootloader, and reports the selected slot and final contents.
++    pub fn run_bootlab_direct(
++        mut self,
++        primary_bytes: &[u8],
++        candidate_bytes: &[u8],
++        fault_index: Option<i32>,
++    ) -> Result<String, String> {
++        if self.slots.len() != 1 {
++            return Err("direct image test requires a single-image layout".into());
++        }
++        let slots = self.slots[0].clone();
++        validate_bootlab_image(primary_bytes)?;
++        validate_bootlab_image(candidate_bytes)?;
++        write_bootlab_slot(&mut self.flash, &slots[0], primary_bytes)?;
++        write_bootlab_slot(&mut self.flash, &slots[1], candidate_bytes)?;
++        install_ptable(&mut self.flash, &self.areadesc);
++
++        mark_permanent_upgrade(&mut self.flash, &slots[1]);
++        mark_upgrade(&mut self.flash, &slots[1]);
++
++        let mut interruption_reached = false;
++        let mut first_result;
++        if let Some(index) = fault_index.filter(|index| *index > 0) {
++            let mut counter = index;
++            first_result = c::boot_go(&mut self.flash, &self.areadesc, Some(&mut counter), None, false);
++            interruption_reached = first_result.interrupted();
++            if interruption_reached {
++                first_result = c::boot_go(&mut self.flash, &self.areadesc, None, None, false);
++            }
++        } else {
++            first_result = c::boot_go(&mut self.flash, &self.areadesc, None, None, false);
++        }
++        if !first_result.success() {
++            return Err(format!("MCUboot boot_go failed: {:?}", first_result));
++        }
++        let selected_offset = first_result.resp().map(|rsp| rsp.image_off).unwrap_or(0);
++        let primary_final = read_bootlab_slot(&self.flash, &slots[0], primary_bytes.len().max(candidate_bytes.len()))?;
++        let secondary_final = read_bootlab_slot(&self.flash, &slots[1], candidate_bytes.len().max(primary_bytes.len()))?;
++        let primary_candidate = primary_final.starts_with(candidate_bytes);
++        let primary_initial = primary_final.starts_with(primary_bytes);
++        let secondary_candidate = secondary_final.starts_with(candidate_bytes);
++        let secondary_initial = secondary_final.starts_with(primary_bytes);
++        let recovery_ok = first_result.success() && (primary_candidate || primary_initial);
++        let config = &self.configuration_id;
++        let primary_hash = bootlab_sha256(&primary_final);
++        let secondary_hash = bootlab_sha256(&secondary_final);
++        let candidate_hash = bootlab_sha256(candidate_bytes);
++        let initial_hash = bootlab_sha256(primary_bytes);
++        let selected_version = if primary_candidate {
++            bootlab_image_version(&primary_final)
++        } else if primary_initial {
++            bootlab_image_version(&primary_final)
++        } else {
++            "unknown".to_string()
++        };
++        Ok(format!(
++            "BOOTLAB_RESULT configuration={} selected_offset={} selected_version={} primary_sha256={} secondary_sha256={} candidate_sha256={} initial_sha256={} candidate_selected={} initial_selected={} secondary_candidate={} secondary_initial={} interruption_reached={} fault_index={} boot_ok={} recovery_ok={}",
++            config,
++            selected_offset,
++            selected_version,
++            primary_hash,
++            secondary_hash,
++            candidate_hash,
++            initial_hash,
++            primary_candidate,
++            primary_initial,
++            secondary_candidate,
++            secondary_initial,
++            interruption_reached,
++            fault_index.unwrap_or(0),
++            first_result.success(),
++            recovery_ok,
++        ))
++    }
++}
++
++fn validate_bootlab_image(image: &[u8]) -> Result<(), String> {
++    if image.len() < 32 || u32::from_le_bytes(image[0..4].try_into().unwrap()) != 0x96f3_b83d {
++        return Err("input is not an MCUboot image with a v1 header".into());
++    }
++    let header_size = u16::from_le_bytes(image[8..10].try_into().unwrap()) as usize;
++    let image_size = u32::from_le_bytes(image[12..16].try_into().unwrap()) as usize;
++    if header_size < 32 || header_size > image.len() || header_size + image_size > image.len() {
++        return Err("MCUboot header or image size is outside the input bytes".into());
++    }
++    Ok(())
++}
++
++fn write_bootlab_slot(flash: &mut SimMultiFlash, slot: &SlotInfo, image: &[u8]) -> Result<(), String> {
++    let available = slot.trailer_off.saturating_sub(slot.base_off);
++    if image.len() > available {
++        return Err(format!("image of {} bytes exceeds slot image area {}", image.len(), available));
++    }
++    let dev = flash.get_mut(&slot.dev_id).ok_or("slot flash device is missing")?;
++    let align = dev.align();
++    let padded_len = (image.len() + align - 1) / align * align;
++    let mut padded = vec![dev.erased_val(); padded_len];
++    padded[..image.len()].copy_from_slice(image);
++    dev.write(slot.base_off, &padded).map_err(|err| err.to_string())
++}
++
++fn read_bootlab_slot(flash: &SimMultiFlash, slot: &SlotInfo, len: usize) -> Result<Vec<u8>, String> {
++    let mut bytes = vec![0; len];
++    flash.get(&slot.dev_id).ok_or("slot flash device is missing")?
++        .read(slot.base_off, &mut bytes).map_err(|err| err.to_string())?;
++    Ok(bytes)
++}
++
++fn bootlab_sha256(bytes: &[u8]) -> String {
++    ring::digest::digest(&ring::digest::SHA256, bytes)
++        .as_ref().iter().map(|byte| format!("{byte:02x}")).collect()
++}
++
++fn bootlab_image_version(image: &[u8]) -> String {
++    if image.len() < 28 { return "unknown".into(); }
++    format!("{}.{}.{}+{}", image[20], image[21], u16::from_le_bytes([image[22], image[23]]), u32::from_le_bytes(image[24..28].try_into().unwrap()))
  }
-
+ 
  impl Images {
 +    /// Stable device/layout identity used to correlate per-configuration results.
 +    pub fn configuration_id(&self) -> &str {
@@ -112,10 +234,10 @@
      /// A simple upgrade without forced failures.
      ///
      /// Returns the number of flash operations which can later be used to
-@@ -1742,9 +1770,63 @@
+@@ -1742,9 +1889,63 @@
          }
      }
-
+ 
 +    /// Run an upgrade, optionally stopping after `fault_index` flash operations to
 +    /// simulate a power-loss reset, then resuming. Returns the final flash state
 +    /// and the total operation count. Public entry point for fault campaigns.
@@ -175,17 +297,17 @@
 +    fn try_upgrade_observed(&self, stop: Option<i32>, permanent: bool) -> (SimMultiFlash, i32, bool) {
          // Clone the flash to have a new copy.
          let mut flash = self.flash.clone();
-
-@@ -1774,7 +1856,7 @@
+ 
+@@ -1774,7 +1975,7 @@
              }
          }
-
+ 
 -        (flash, count - counter)
 +        (flash, count - counter, first_interrupted)
      }
-
+ 
      fn try_revert(&self, count: usize) -> SimMultiFlash {
---- /dev/null
+--- a/sim/tests/fault_campaign.rs
 +++ b/sim/tests/fault_campaign.rs
 @@ -0,0 +1,49 @@
 +// Copyright (c) 2026 BootLab contributors
@@ -236,4 +358,34 @@
 +                 observation.primary_trailer_valid, observation.secondary_trailer_valid);
 +        assert!(observation.recovery_ok, "fault_campaign_upgrade failed at index {}", fault_index);
 +    });
++}
+--- a/sim/tests/bootlab_direct.rs
++++ b/sim/tests/bootlab_direct.rs
+@@ -0,0 +1,27 @@
++// Copyright (c) 2026 BootLab contributors
++//
++// SPDX-License-Identifier: Apache-2.0
++
++//! Direct BootLab image-input integration. Images are read from immutable
++//! corpus paths supplied by the Python adapter and installed into MCUboot's
++//! simulator flash layout.
++
++use bootsim::{testlog, DeviceName, ImagesBuilder};
++
++#[test]
++fn bootlab_direct_image() {
++    testlog::setup();
++    let primary_path = std::env::var("BOOTLAB_PRIMARY_IMAGE")
++        .expect("BOOTLAB_PRIMARY_IMAGE is required");
++    let candidate_path = std::env::var("BOOTLAB_CANDIDATE_IMAGE")
++        .expect("BOOTLAB_CANDIDATE_IMAGE is required");
++    let primary = std::fs::read(&primary_path).expect("could not read primary image input");
++    let candidate = std::fs::read(&candidate_path).expect("could not read candidate image input");
++    let fault_index = std::env::var("BOOTLAB_FAULT_INDEX")
++        .ok().map(|value| value.parse::<i32>().expect("fault index must be an integer"));
++    let builder = ImagesBuilder::new(DeviceName::Nrf52840, 8, 0xff)
++        .expect("reference nrf52840 layout must be supported");
++    let observation = builder.run_bootlab_direct(&primary, &candidate, fault_index)
++        .expect("direct bootloader run must return a structured observation");
++    println!("{}", observation);
 +}

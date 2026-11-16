@@ -30,7 +30,7 @@ security_counter:
   enabled: false
 features:
   - sig-ecdsa
-  - swap-scratch
+  - overwrite-only
   - downgrade-prevention
 notes: |
   Overwrite-only simulator configuration with image-version downgrade

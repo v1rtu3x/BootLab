@@ -13,15 +13,19 @@ secondary:
 operation: stage_then_upgrade
 backend: mcuboot_sim
 backend_args:
-  cargo_test: downgrade_prevention
+  cargo_test: bootlab_direct_image
   cargo_features: "sig-ecdsa downgrade-prevention overwrite-only"
+  primary_image: v2.0.0-trusted.signed.bin
+  candidate_image: v1.5.0-trusted.signed.bin
+  expected_selection: primary
+  key_type: ecdsa-p256
 fault:
   type: none
 expect:
   invalid_image_booted: false
   outcome_in:
     - secure_refusal
+  booted_version: "2.0.0"
 notes: |
-  With downgrade prevention enabled, an otherwise valid but older signed
-  image must be rejected. The upstream proxy's internal assertion establishes
-  secure refusal, but does not test a BootLab-declared image input directly.
+  Injects the same authenticated primary and older candidate as V02. MCUboot's
+  observed primary selection establishes refusal with downgrade prevention on.

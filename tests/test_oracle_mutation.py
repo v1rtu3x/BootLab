@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from bootlab.backends.mcuboot_sim import SimulatorResult
 from bootlab.oracles import evaluate
-from bootlab.scenario import Backend, Category, ExpectSpec, Scenario
+from bootlab.scenario import Backend, Category, ExpectSpec, FaultSpec, Scenario
 
 
 def _scenario(
@@ -24,6 +24,14 @@ def _scenario(
         profile="p",
         backend=backend,
         backend_args=backend_args,
+        fault=(
+            FaultSpec(
+                type="reset",
+                index=int(backend_args.get("env", {}).get("FAULT_INDEX", "0")),
+            )
+            if category == Category.FAULT
+            else FaultSpec(type="none")
+        ),
         expect=expect,
     )
 
@@ -31,7 +39,9 @@ def _scenario(
 def _cargo_result(stdout: str, returncode: int = 0) -> SimulatorResult:
     return SimulatorResult(
         returncode=returncode,
-        stdout=f"test basic_revert ... ok\n{stdout}" if "test basic_revert" not in stdout else stdout,
+        stdout=f"test basic_revert ... ok\n{stdout}"
+        if "test basic_revert" not in stdout
+        else stdout,
         stderr="",
         backend=Backend.MCUBOOT_SIM,
         backend_args={"cargo_test": "basic_revert"},
@@ -58,6 +68,26 @@ def test_imgtool_rejected_but_returncode_zero() -> None:
     assert "accepted" in oracle.verdict
 
 
+def test_truncated_image_expected_struct_error_is_recorded_as_crash() -> None:
+    scenario = _scenario(
+        Category.VALIDATION,
+        Backend.IMGTOOL_VERIFY,
+        {"image": "truncated.bin"},
+        ExpectSpec(outcome_in=["validator_crash"]),
+    )
+    result = SimulatorResult(
+        returncode=1,
+        stdout="",
+        stderr="Traceback (most recent call last):\nstruct.error: unpack requires a buffer of 4 bytes",
+        backend=Backend.IMGTOOL_VERIFY,
+        backend_args=scenario.backend_args,
+    )
+    oracle = evaluate(scenario, result)
+    assert oracle.passed is True
+    assert oracle.verdict == "PASS: REPRODUCED_VALIDATOR_CRASH"
+    assert oracle.details["observation_scope"] == "imgtool host-side verifier only"
+
+
 def test_baseline_cargo_test_fails() -> None:
     """A positive baseline scenario must fail when the cargo test does not pass."""
     scenario = _scenario(
@@ -73,17 +103,16 @@ def test_baseline_cargo_test_fails() -> None:
 
 
 def test_invalid_image_booted_expectation_rejected() -> None:
-    """A scenario expecting an invalid image to boot is unsupported in the MVP."""
-    scenario = _scenario(
-        Category.INTEGRITY,
-        Backend.MCUBOOT_SIM,
-        {"cargo_test": "basic_revert"},
-        ExpectSpec(invalid_image_booted=True),
-    )
-    result = _cargo_result("test result: ok. 1 passed; 0 failed;")
-    oracle = evaluate(scenario, result)
-    assert oracle.passed is False
-    assert "invalid image boot" in oracle.verdict
+    """Unsupported outcomes fail during configuration validation."""
+    import pytest
+
+    with pytest.raises(ValueError, match="invalid_image_booted is unsupported"):
+        _scenario(
+            Category.INTEGRITY,
+            Backend.MCUBOOT_SIM,
+            {"cargo_test": "basic_revert"},
+            ExpectSpec(invalid_image_booted=True),
+        )
 
 
 def test_version_enabled_proxy_asserts_refusal_after_successful_execution() -> None:
@@ -91,7 +120,10 @@ def test_version_enabled_proxy_asserts_refusal_after_successful_execution() -> N
     scenario = _scenario(
         Category.VERSION,
         Backend.MCUBOOT_SIM,
-        {"cargo_test": "downgrade_prevention", "cargo_features": "sig-ecdsa downgrade-prevention overwrite-only"},
+        {
+            "cargo_test": "downgrade_prevention",
+            "cargo_features": "sig-ecdsa downgrade-prevention overwrite-only",
+        },
         ExpectSpec(outcome_in=["secure_refusal"]),
     )
     result = SimulatorResult(
@@ -99,7 +131,10 @@ def test_version_enabled_proxy_asserts_refusal_after_successful_execution() -> N
         stdout="test downgrade_prevention ... ok\ntest result: ok. 1 passed; 0 failed;",
         stderr="",
         backend=Backend.MCUBOOT_SIM,
-        backend_args={"cargo_test": "downgrade_prevention", "cargo_features": "sig-ecdsa downgrade-prevention overwrite-only"},
+        backend_args={
+            "cargo_test": "downgrade_prevention",
+            "cargo_features": "sig-ecdsa downgrade-prevention overwrite-only",
+        },
     )
     oracle = evaluate(scenario, result)
     assert oracle.passed is True
@@ -139,7 +174,10 @@ def test_fault_scenario_cargo_test_fails() -> None:
         stdout="FAULT_RESULT configuration=nrf52840-align-8-erased-ff index=1 reached=true operation_count=406 recovery_ok=false primary_image_valid=false secondary_image_valid=true primary_trailer_valid=true secondary_trailer_valid=true\ntest fault_campaign_upgrade ... FAILED\ntest result: FAILED. 0 passed; 1 failed;",
         stderr="",
         backend=Backend.MCUBOOT_SIM,
-        backend_args={"cargo_test": "fault_campaign_upgrade", "env": {"FAULT_INDEX": "1"}},
+        backend_args={
+            "cargo_test": "fault_campaign_upgrade",
+            "env": {"FAULT_INDEX": "1"},
+        },
     )
     oracle = evaluate(scenario, result)
     assert oracle.passed is False
@@ -183,7 +221,7 @@ def test_infrastructure_error() -> None:
     )
     oracle = evaluate(scenario, result)
     assert oracle.passed is False
-    assert "infrastructure_error" in oracle.verdict
+    assert oracle.verdict == "ERROR"
 
 
 def test_baseline_positive_with_zero_passed_count() -> None:

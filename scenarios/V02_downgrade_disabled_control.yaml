@@ -13,16 +13,19 @@ secondary:
 operation: stage_then_upgrade
 backend: mcuboot_sim
 backend_args:
-  cargo_test: downgrade_prevention
+  cargo_test: bootlab_direct_image
   cargo_features: "sig-ecdsa overwrite-only"
+  primary_image: v2.0.0-trusted.signed.bin
+  candidate_image: v1.5.0-trusted.signed.bin
+  expected_selection: candidate
+  key_type: ecdsa-p256
 fault:
   type: none
 expect:
   invalid_image_booted: false
   outcome_in:
     - old_authenticated_image
+  booted_version: "1.5.0"
 notes: |
-  Equivalent overwrite-only control with downgrade prevention disabled. The
-  intended result is acceptance of the older authenticated candidate, but the
-  upstream proxy does not report the observed image/version, so this case is
-  reported as SKIP pending direct behavioral integration.
+  Uses the exact same authenticated image bytes as V01 with downgrade
+  prevention disabled and asserts MCUboot selects the older candidate.

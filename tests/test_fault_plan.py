@@ -31,14 +31,26 @@ def _result(index: int, reached: bool, operation_count: int = 406) -> SimulatorR
 
 
 def test_nonzero_unreached_index_does_not_pass(tmp_path: Path) -> None:
-    row = run_fault_index(FakeAdapter(_result(570, False)), 570, "sig-ecdsa", tmp_path)[0]
+    row = run_fault_index(
+        FakeAdapter(_result(570, False)),
+        570,
+        "sig-ecdsa",
+        tmp_path,
+        {"nrf52840-align-8-erased-ff": 406},
+    )[0]
     assert row.passed is False
     assert row.outcome == "NOT_REACHED"
     assert row.reached is False
 
 
 def test_reached_index_records_operation_count(tmp_path: Path) -> None:
-    row = run_fault_index(FakeAdapter(_result(1, True)), 1, "sig-ecdsa", tmp_path)[0]
+    row = run_fault_index(
+        FakeAdapter(_result(1, True)),
+        1,
+        "sig-ecdsa",
+        tmp_path,
+        {"nrf52840-align-8-erased-ff": 406},
+    )[0]
     assert row.passed is True
     assert row.outcome == "REACHED"
     assert row.configuration == "nrf52840-align-8-erased-ff"
@@ -69,3 +81,57 @@ def test_probe_preserves_counts_per_configuration() -> None:
         "nrf52840-align-8-erased-ff": 406,
         "stm32f4-align-16-erased-00": 403,
     }
+
+
+def test_no_cut_baseline_is_distinct_from_reached_fault(tmp_path: Path) -> None:
+    row = run_fault_index(
+        FakeAdapter(_result(0, False)),
+        0,
+        "sig-ecdsa",
+        tmp_path,
+        {"nrf52840-align-8-erased-ff": 406},
+    )[0]
+    assert row.passed is True
+    assert row.outcome == "NO_CUT_BASELINE"
+    assert row.reached is False
+
+
+def test_malformed_and_inconsistent_fault_results_fail(tmp_path: Path) -> None:
+    malformed = _result(1, True)
+    malformed.stdout = malformed.stdout.replace("recovery_ok=true", "recovery_ok=yes")
+    row = run_fault_index(
+        FakeAdapter(malformed),
+        1,
+        "sig-ecdsa",
+        tmp_path,
+        {"nrf52840-align-8-erased-ff": 406},
+    )[0]
+    assert row.passed is False
+    assert row.outcome == "ERROR"
+
+    inconsistent = _result(1, True)
+    inconsistent.stdout = inconsistent.stdout.replace(
+        "primary_image_valid=true", "primary_image_valid=false"
+    )
+    row = run_fault_index(
+        FakeAdapter(inconsistent),
+        1,
+        "sig-ecdsa",
+        tmp_path,
+        {"nrf52840-align-8-erased-ff": 406},
+    )[0]
+    assert row.passed is False
+    assert "state_consistent=False" in row.note
+
+
+def test_fault_result_requires_every_probed_configuration(tmp_path: Path) -> None:
+    row = run_fault_index(
+        FakeAdapter(_result(1, True)),
+        1,
+        "sig-ecdsa",
+        tmp_path,
+        {"nrf52840-align-8-erased-ff": 406, "stm32f4-align-16-erased-00": 403},
+    )
+    assert len(row) == 1
+    assert row[0].passed is False
+    assert row[0].outcome == "MISSING_RESULT"

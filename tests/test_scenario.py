@@ -7,7 +7,14 @@ from pathlib import Path
 import pytest
 import yaml
 
-from bootlab.scenario import Category, ExpectSpec, Matrix, Scenario, load_scenario
+from bootlab.scenario import (
+    Backend,
+    Category,
+    ExpectSpec,
+    Matrix,
+    Scenario,
+    load_scenario,
+)
 
 
 def test_expect_spec_defaults() -> None:
@@ -63,9 +70,14 @@ def test_matrix_round_trip(tmp_path: Path) -> None:
 
 
 def test_unknown_scenario_fields_are_rejected() -> None:
-    with pytest.raises(Exception, match="extra_forbidden|Extra inputs are not permitted"):
+    with pytest.raises(
+        Exception, match="extra_forbidden|Extra inputs are not permitted"
+    ):
         Scenario(
-            id="T01", name="test", category=Category.BASELINE, profile="p",
+            id="T01",
+            name="test",
+            category=Category.BASELINE,
+            profile="p",
             undocumented_typo=True,
         )
 
@@ -75,3 +87,56 @@ def test_matrix_rejects_duplicate_scenario_ids() -> None:
     second = Scenario(id="T01", name="two", category=Category.BASELINE, profile="p")
     with pytest.raises(Exception, match="duplicate scenario IDs"):
         Matrix(name="duplicates", description="test", scenarios=[first, second])
+
+
+def test_scenario_rejects_unknown_cargo_feature_before_backend() -> None:
+    with pytest.raises(Exception, match="unsupported Cargo feature"):
+        Scenario(
+            id="T01",
+            name="test",
+            category=Category.BASELINE,
+            profile="p",
+            backend_args={
+                "cargo_test": "basic_revert",
+                "cargo_features": "sig-ecdsa misspelled-feature",
+            },
+        )
+
+
+def test_fault_index_must_match_effective_environment() -> None:
+    with pytest.raises(Exception, match="must match env.FAULT_INDEX"):
+        Scenario(
+            id="T01",
+            name="fault",
+            category=Category.FAULT,
+            profile="p",
+            backend_args={
+                "cargo_test": "fault_campaign_upgrade",
+                "env": {"FAULT_INDEX": "2"},
+            },
+            fault={"type": "reset", "index": 1},
+        )
+
+
+def test_scenario_rejects_invalid_backend_argument_types() -> None:
+    with pytest.raises(Exception, match="env must map string keys"):
+        Scenario(
+            id="T01",
+            name="test",
+            category=Category.BASELINE,
+            profile="p",
+            backend_args={"cargo_test": "basic_revert", "env": {"COUNT": 1}},
+        )
+
+
+def test_scenario_rejects_unsupported_expectation() -> None:
+    with pytest.raises(Exception, match="verify_rejected is supported only"):
+        Scenario(
+            id="T01",
+            name="test",
+            category=Category.INTEGRITY,
+            profile="p",
+            backend=Backend.MCUBOOT_SIM,
+            backend_args={"cargo_test": "bad_secondary_slot"},
+            expect={"verify_rejected": True},
+        )
